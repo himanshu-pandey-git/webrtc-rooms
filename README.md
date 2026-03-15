@@ -557,7 +557,9 @@ at the end. No test runner, no mocking framework.
 ## Contributing
 
 See [Contributing.md](./Contributing.md) for setup instructions, coding
-standards, and the pull request process.
+standards, pull request process, and code merge rules.
+
+For project governance and decision-making, see [GOVERNANCE.md](./GOVERNANCE.md).
 
 For security reports, see [SECURITY.md](./SECURITY.md).
 

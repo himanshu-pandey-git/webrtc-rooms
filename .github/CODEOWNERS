@@ -1,0 +1,16 @@
+# Default owner for all files
+* @himanshu-pandey-git
+
+# Core runtime and protocol
+/src/ @himanshu-pandey-git
+
+# CI and release automation
+/.github/workflows/ @himanshu-pandey-git
+
+# Docs and policy files
+/README.md @himanshu-pandey-git
+/Contributing.md @himanshu-pandey-git
+/SECURITY.md @himanshu-pandey-git
+/CODE_OF_CONDUCT.md @himanshu-pandey-git
+/SUPPORT.md @himanshu-pandey-git
+/GOVERNANCE.md @himanshu-pandey-git
