@@ -6,7 +6,7 @@
 
 WebRTC signaling, room management, SFU, recording, and admin API for Node.js.
 
-Built and maintained by [Himanshu Pandey](https://github.com/himanshu-pandey).
+Built and maintained by [Himanshu Pandey](https://github.com/himanshu-pandey-git).
 
 ---
 
@@ -572,4 +572,4 @@ standards, and the pull request process.
 
 ## License
 
-[MIT](./LICENSE) © [Himanshu Pandey](https://github.com/himanshu-pandey)
+[MIT](./LICENSE) © [Himanshu Pandey](https://github.com/himanshu-pandey-git)
