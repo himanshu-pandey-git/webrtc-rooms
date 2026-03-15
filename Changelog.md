@@ -21,7 +21,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Standardized advanced example naming to `examples/advanced-server.js`
   and excluded the legacy `examples/advance-server.js` from npm artifacts.
 
-## [1.0.0] — 2025-01-01
+## [1.0.0] — 2026-03-15
 
 ### Added
 
