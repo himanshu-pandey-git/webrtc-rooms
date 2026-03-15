@@ -33,6 +33,28 @@ export type MetadataValue = string | number | boolean | null;
 export type MetadataMap = Record<string, MetadataValue>;
 
 // ---------------------------------------------------------------------------
+// WebRTC shape aliases
+//
+// These describe the plain JSON objects that flow over the wire.
+// Defined here rather than importing from lib.dom so this package compiles
+// without DOM types in the consumer's TypeScript project.
+// ---------------------------------------------------------------------------
+
+/** Plain object shape of an SDP offer or answer as sent over the wire. */
+export interface RTCSessionDescriptionInit {
+  type: 'offer' | 'answer' | 'pranswer' | 'rollback';
+  sdp?: string;
+}
+
+/** Plain object shape of an ICE candidate as sent over the wire. */
+export interface RTCIceCandidateInit {
+  candidate?: string;
+  sdpMid?: string | null;
+  sdpMLineIndex?: number | null;
+  usernameFragment?: string | null;
+}
+
+// ---------------------------------------------------------------------------
 // Wire protocol — server → client
 // ---------------------------------------------------------------------------
 
@@ -393,3 +415,125 @@ export declare class RateLimiter extends EventEmitter {
  * const server = createServer({ port: 3000 });
  */
 export declare function createServer(options?: SignalingServerOptions): SignalingServer;
+
+// ---------------------------------------------------------------------------
+// RedisAdapter
+// ---------------------------------------------------------------------------
+
+export interface RedisAdapterOptions {
+  pub:        object;
+  sub:        object;
+  server:     SignalingServer;
+  channel?:   string;
+  keyPrefix?: string;
+  peerTtl?:   number;
+}
+
+export interface RemotePeerDetail {
+  peerId:    string;
+  processId: string;
+  joinedAt:  number;
+}
+
+export declare class RedisAdapter extends EventEmitter {
+  constructor(options: RedisAdapterOptions);
+
+  init(): Promise<void>;
+  close(): Promise<void>;
+
+  getRoomPeers(roomId: string): Promise<string[]>;
+  getActiveRooms(): Promise<string[]>;
+  getRoomPeerDetails(roomId: string): Promise<RemotePeerDetail[]>;
+
+  on(event: 'message:published', listener: (payload: object) => void): this;
+  on(event: 'message:received',  listener: (envelope: object) => void): this;
+  on(event: 'remote:peer:joined', listener: (envelope: object) => void): this;
+  on(event: 'remote:peer:left',   listener: (envelope: object) => void): this;
+  on(event: 'error',              listener: (err: Error) => void): this;
+}
+
+// ---------------------------------------------------------------------------
+// RoomPersistence
+// ---------------------------------------------------------------------------
+
+export interface RoomPersistenceOptions {
+  redis:         object;
+  server:        SignalingServer;
+  keyPrefix?:    string;
+  indexKey?:     string;
+  snapshotTtl?:  number;
+}
+
+/**
+ * Shape of a room snapshot as stored in and returned from Redis.
+ * Distinct from {@link RoomSnapshot} (which is the live room state shape
+ * returned by `Room.getState()`) because it includes persistence-specific
+ * fields (`maxPeers`, `savedAt`) and uses `roomId` as the key field.
+ */
+export interface PersistedRoomSnapshot {
+  roomId:    string;
+  metadata:  MetadataMap;
+  maxPeers:  number;
+  createdAt: number;
+  savedAt:   number;
+}
+
+export interface RestoreResult {
+  restored: string[];
+  skipped:  string[];
+}
+
+export declare class RoomPersistence extends EventEmitter {
+  constructor(options: RoomPersistenceOptions);
+
+  restore(): Promise<RestoreResult>;
+  attach(): this;
+  saveRoom(roomId: string): Promise<void>;
+  deleteSnapshot(roomId: string): Promise<void>;
+  listSnapshots(): Promise<PersistedRoomSnapshot[]>;
+
+  on(event: 'room:saved',        listener: (info: { roomId: string; key: string }) => void): this;
+  on(event: 'room:deleted',      listener: (info: { roomId: string }) => void): this;
+  on(event: 'restore:complete',  listener: (result: RestoreResult) => void): this;
+}
+
+// ---------------------------------------------------------------------------
+// E2EKeyExchange
+// ---------------------------------------------------------------------------
+
+export interface E2EKeyExchangeOptions {
+  server:                       SignalingServer;
+  requireKeyOnJoin?:            boolean;
+  keyAnnouncementTimeoutMs?:    number;
+  allowedCurves?:               string[];
+}
+
+export interface PublicKeyEntry {
+  publicKey:   string;
+  curve:       string;
+  announcedAt: number;
+  version:     number;
+}
+
+export interface RoomKeyEntry extends PublicKeyEntry {
+  peerId: string;
+}
+
+export interface E2EStats {
+  roomId:    string;
+  peerCount: number;
+}
+
+export declare class E2EKeyExchange extends EventEmitter {
+  constructor(options: E2EKeyExchangeOptions);
+
+  attach(): this;
+
+  getPeerKey(roomId: string, peerId: string): PublicKeyEntry | undefined;
+  getRoomKeys(roomId: string): RoomKeyEntry[];
+  stats(): E2EStats[];
+
+  on(event: 'key:announced', listener: (info: { peerId: string; roomId: string; publicKey: string; curve: string }) => void): this;
+  on(event: 'key:rotated',   listener: (info: { peerId: string; roomId: string; publicKey: string; curve: string; version: number }) => void): this;
+  on(event: 'key:revoked',   listener: (info: { peerId: string; roomId: string; entry: PublicKeyEntry }) => void): this;
+}

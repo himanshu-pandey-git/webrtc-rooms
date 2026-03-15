@@ -15,7 +15,7 @@
 
 - [ ] I ran `node tests/index.test.js`
 - [ ] I added/updated tests for this change
-- [ ] CI should pass on Node 18/20/22
+- [ ] CI should pass on Node 18/20/22/24
 
 ## Documentation
 
@@ -28,7 +28,7 @@
 - [ ] PR is focused (single logical change)
 - [ ] No secrets/tokens/private data in code, logs, or screenshots
 - [ ] Review comments are addressed
-- [ ] I confirm this PR follows [Contributing.md](../Contributing.md)
+- [ ] I confirm this PR follows [CONTRIBUTING.md](../CONTRIBUTING.md)
 
 ## Breaking change details (required if applicable)
 

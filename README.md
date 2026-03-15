@@ -20,7 +20,7 @@ room lifecycle, authentication, reconnection, and eventually scaling to more
 than a handful of peers. **webrtc-rooms** solves all of these in a single
 composable library so you can focus on your product.
 
-```
+```bash
 npm install webrtc-rooms
 ```
 
@@ -65,8 +65,8 @@ Browser A                 webrtc-rooms server              Browser B
     │◄─ { answer, from:B } ─────│                               │
     │                           │                               │
     ◄──────────── ICE trickle ──┼──────── ICE trickle ─────────►│
-    │                                                            │
-    ◄═══════════════ direct P2P media (no server) ══════════════►│
+    │                                                           │
+    ◄═══════════════ direct P2P media (no server)══════════════►│
 ```
 
 ---
@@ -83,15 +83,22 @@ Browser A                 webrtc-rooms server              Browser B
   - [MediasoupAdapter](#mediasoupadapter)
   - [RateLimiter](#ratelimiter)
   - [AdminAPI](#adminapi)
+  - [RedisAdapter](#redisadapter)
+  - [RoomPersistence](#roompersistence)
+  - [E2EKeyExchange](#e2ekeyexchange)
 - [Wire protocol](#wire-protocol)
 - [Authentication](#authentication)
 - [Reconnection](#reconnection)
+- [Multi-server scaling](#multi-server-scaling)
+- [Room persistence](#room-persistence)
+- [End-to-end encryption](#end-to-end-encryption)
 - [Recording](#recording)
 - [SFU mode](#sfu-mode)
 - [Rate limiting](#rate-limiting)
 - [Admin REST API](#admin-rest-api)
 - [TypeScript](#typescript)
 - [Mounting on Express](#mounting-on-express)
+- [Running tests](#running-tests)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -107,6 +114,14 @@ For SFU support, also install the optional peer dependency:
 
 ```bash
 npm install mediasoup
+```
+
+For multi-server scaling and room persistence:
+
+```bash
+npm install redis        # node-redis v4
+# or
+npm install ioredis
 ```
 
 For recording, `ffmpeg` must be installed and available on `PATH`.
@@ -141,7 +156,7 @@ const server = createServer({
 
 ```js
 server.on('listening',        ({ port }) => { });
-server.on('peer:connected',   (peer) => { });          // raw WS open, before room join
+server.on('peer:connected',   (peer) => { });        // raw WS open, before room join
 server.on('peer:joined',      (peer, room) => { });
 server.on('peer:left',        (peer, room) => { });
 server.on('peer:reconnected', (peer, room) => { });
@@ -254,12 +269,12 @@ recorder.activeRecordings();
 **Events**
 
 ```js
-recorder.on('recording:started',       ({ peerId, roomId, path }) => { });
-recorder.on('recording:stopped',       ({ peerId, roomId, path, durationMs }) => { });
-recorder.on('recording:error',         ({ peerId, roomId, error }) => { });
-recorder.on('recording:progress',      ({ peerId, roomId, line }) => { });   // ffmpeg stderr
-recorder.on('recording:room:started',  ({ roomId, peers }) => { });
-recorder.on('recording:room:stopped',  ({ roomId, files }) => { });
+recorder.on('recording:started',      ({ peerId, roomId, path }) => { });
+recorder.on('recording:stopped',      ({ peerId, roomId, path, durationMs }) => { });
+recorder.on('recording:error',        ({ peerId, roomId, error }) => { });
+recorder.on('recording:progress',     ({ peerId, roomId, line }) => { }); // ffmpeg stderr
+recorder.on('recording:room:started', ({ roomId, peers }) => { });
+recorder.on('recording:room:stopped', ({ roomId, files }) => { });
 ```
 
 Requires `ffmpeg` on `PATH`. In a `wrtc` (node-webrtc) deployment, replace
@@ -275,7 +290,7 @@ const { MediasoupAdapter } = require('webrtc-rooms');
 
 const sfu = new MediasoupAdapter({
   listenIp:    '0.0.0.0',
-  announcedIp: process.env.PUBLIC_IP,   // required behind NAT
+  announcedIp: process.env.PUBLIC_IP, // required behind NAT
   rtcMinPort:  10000,
   rtcMaxPort:  10200,
 });
@@ -296,8 +311,8 @@ SFU signals are sent through the existing data relay channel using a `__sfu`
 discriminator:
 
 ```js
-// Browser sends these through the normal data relay:
-ws.send(JSON.stringify({ type: 'data', payload: { __sfu: 'produce', kind: 'video', rtpParameters: { … } } }));
+// Browser sends through the data relay:
+ws.send(JSON.stringify({ type: 'data', payload: { __sfu: 'produce', kind: 'video', rtpParameters: { } } }));
 ws.send(JSON.stringify({ type: 'data', payload: { __sfu: 'consume', producerId, rtpCapabilities } }));
 ws.send(JSON.stringify({ type: 'data', payload: { __sfu: 'consumer:resume', producerId } }));
 ```
@@ -310,23 +325,23 @@ ws.send(JSON.stringify({ type: 'data', payload: { __sfu: 'consumer:resume', prod
 const { RateLimiter } = require('webrtc-rooms');
 
 const limiter = new RateLimiter({
-  maxConnPerMin:  20,      // new connections per IP per minute before ban
-  maxMsgPerSec:   30,      // signals per peer per second
-  maxMsgPerMin:   200,     // signals per peer per minute
-  banDurationMs:  60_000,  // how long a banned IP is blocked
+  maxConnPerMin:  20,       // new connections per IP per minute before ban
+  maxMsgPerSec:   30,       // signals per peer per second
+  maxMsgPerMin:   200,      // signals per peer per minute
+  banDurationMs:  60_000,   // how long a banned IP is blocked
   whitelist:      ['127.0.0.1', '::1'],
 });
 
-limiter.attach(server);   // must be called after createServer()
+limiter.attach(server); // must be called after createServer()
 
-limiter.on('ip:banned',        ({ ip, until }) => { });
+limiter.on('ip:banned',          ({ ip, until }) => { });
 limiter.on('connection:blocked', ({ ip }) => { });
-limiter.on('signal:blocked',    ({ peerId }) => { });
+limiter.on('signal:blocked',     ({ peerId }) => { });
 
 // Manual administration
 limiter.ban('1.2.3.4');
 limiter.unban('1.2.3.4');
-limiter.bans();  // → [{ ip, expiresIn }]
+limiter.bans();   // → [{ ip, expiresIn }]
 
 // Clean up the internal interval when shutting down
 limiter.destroy();
@@ -351,21 +366,304 @@ await admin.close();
 
 #### Endpoints
 
-| Method   | Path                              | Description                           |
-|----------|-----------------------------------|---------------------------------------|
-| `GET`    | `/admin/health`                   | Liveness check (`{ status: 'ok' }`)   |
-| `GET`    | `/admin/stats`                    | Rooms, peers, memory, node version    |
-| `GET`    | `/admin/rooms`                    | List all rooms                        |
-| `POST`   | `/admin/rooms`                    | Create room `{ roomId?, metadata? }`  |
-| `GET`    | `/admin/rooms/:id`                | Full room state + peer list           |
-| `PATCH`  | `/admin/rooms/:id`                | Update room metadata `{ metadata }`   |
-| `DELETE` | `/admin/rooms/:id`                | Destroy room; kicks all its peers     |
-| `POST`   | `/admin/rooms/:id/broadcast`      | Send data payload to room             |
-| `GET`    | `/admin/peers`                    | List all connected peers              |
-| `DELETE` | `/admin/peers/:id`                | Kick a peer `{ reason? }`             |
+| Method   | Path                             | Description                          |
+|----------|----------------------------------|--------------------------------------|
+| `GET`    | `/admin/health`                  | Liveness check (`{ status: 'ok' }`)  |
+| `GET`    | `/admin/stats`                   | Rooms, peers, memory, node version   |
+| `GET`    | `/admin/rooms`                   | List all rooms                       |
+| `POST`   | `/admin/rooms`                   | Create room `{ roomId?, metadata? }` |
+| `GET`    | `/admin/rooms/:id`               | Full room state + peer list          |
+| `PATCH`  | `/admin/rooms/:id`               | Update room metadata `{ metadata }`  |
+| `DELETE` | `/admin/rooms/:id`               | Destroy room; kicks all its peers    |
+| `POST`   | `/admin/rooms/:id/broadcast`     | Send data payload to room            |
+| `GET`    | `/admin/peers`                   | List all connected peers             |
+| `DELETE` | `/admin/peers/:id`               | Kick a peer `{ reason? }`            |
 
-All routes require `Authorization: Bearer <adminSecret>` when `adminSecret` is set.
-Unauthorized requests receive `401 Unauthorized`.
+All routes require `Authorization: Bearer <adminSecret>` when `adminSecret` is
+set. Unauthorized requests receive `401 Unauthorized`.
+
+---
+
+### RedisAdapter
+
+Bridges multiple `SignalingServer` processes via Redis pub/sub so they behave
+as a single logical signaling cluster. Required when running behind a load
+balancer or across multiple servers.
+
+```js
+const { createServer, RedisAdapter } = require('webrtc-rooms');
+const { createClient } = require('redis'); // node-redis v4
+
+const server = createServer({ port: 3000 });
+
+// Two separate Redis clients are required:
+// one for subscribe (connection is blocked) and one for publish/commands.
+const pub = createClient({ url: process.env.REDIS_URL });
+const sub = createClient({ url: process.env.REDIS_URL });
+
+await pub.connect();
+await sub.connect();
+
+const adapter = new RedisAdapter({ pub, sub, server });
+await adapter.init();
+```
+
+**Options**
+
+```js
+new RedisAdapter({
+  pub,               // Redis client for publishing (required)
+  sub,               // Redis client for subscribing (required)
+  server,            // SignalingServer instance (required)
+  channel:  'webrtc-rooms:bus',   // override the pub/sub channel name
+  keyPrefix:'webrtc-rooms:room:', // override Redis key prefix
+  peerTtl:  300,     // seconds before a peer's Redis entry expires (0 = no expiry)
+});
+```
+
+**Cross-cluster queries**
+
+```js
+// All peer IDs in a room across every process
+const peers = await adapter.getRoomPeers('my-room');
+// → ['peer-uuid-1', 'peer-uuid-2', ...]
+
+// All rooms with at least one peer anywhere in the cluster
+const rooms = await adapter.getActiveRooms();
+// → ['my-room', 'standup', ...]
+
+// Full detail: which process each peer is on
+const details = await adapter.getRoomPeerDetails('my-room');
+// → [{ peerId, processId, joinedAt }, ...]
+```
+
+**Events**
+
+```js
+adapter.on('message:published', (payload) => { });
+adapter.on('message:received',  (envelope) => { });
+adapter.on('remote:peer:joined',(envelope) => { });
+adapter.on('remote:peer:left',  (envelope) => { });
+```
+
+**How it works**
+
+When a peer sends a signaling message to a target that is not on the local
+process, `RedisAdapter` publishes the message to a Redis channel. Every
+process subscribes to that channel and delivers the message if the target peer
+is one of its own local connections. A process-unique stamp prevents a process
+from re-delivering its own publications.
+
+---
+
+### RoomPersistence
+
+Snapshots room metadata to Redis so rooms are automatically restored after a
+server restart. Peer connections cannot survive a restart by definition, but
+room structure (ID, metadata, capacity) is preserved.
+
+```js
+const { createServer, RoomPersistence } = require('webrtc-rooms');
+const { createClient } = require('redis');
+
+const redis  = createClient({ url: process.env.REDIS_URL });
+await redis.connect();
+
+// autoCreateRooms: false — rooms will be created by restore()
+const server = createServer({ port: 3000, autoCreateRooms: false });
+
+const persistence = new RoomPersistence({ redis, server });
+
+// Step 1 — restore rooms from the last snapshot before accepting connections
+const { restored, skipped } = await persistence.restore();
+console.log(`Restored ${restored.length} room(s)`);
+
+// Step 2 — persist future room creation and metadata changes
+persistence.attach();
+```
+
+**Options**
+
+```js
+new RoomPersistence({
+  redis,            // Redis client (required)
+  server,           // SignalingServer instance (required)
+  keyPrefix:  'webrtc-rooms:snapshot:',  // override snapshot key prefix
+  indexKey:   'webrtc-rooms:snapshot-index', // override index set key
+  snapshotTtl: 0,   // optional TTL in seconds; 0 = keep indefinitely
+});
+```
+
+**Methods**
+
+```js
+// Restore rooms from Redis (call before attach() and before clients connect)
+const { restored, skipped } = await persistence.restore();
+
+// Start persisting changes
+persistence.attach();
+
+// Manually force-save a specific room
+await persistence.saveRoom('my-room');
+
+// Delete a snapshot without affecting the live room
+await persistence.deleteSnapshot('my-room');
+
+// Inspect all stored snapshots
+const snapshots = await persistence.listSnapshots();
+// → [{ roomId, metadata, maxPeers, createdAt, savedAt }, ...]
+```
+
+**Events**
+
+```js
+persistence.on('room:saved',       ({ roomId, key }) => { });
+persistence.on('room:deleted',     ({ roomId }) => { });
+persistence.on('restore:complete', ({ restored, skipped }) => { });
+```
+
+**What is and is not persisted**
+
+| Persisted | Not persisted |
+|---|---|
+| Room ID | Peer WebSocket connections |
+| Room metadata | Peer metadata |
+| `maxPeers` limit | In-flight signaling messages |
+| Original `createdAt` timestamp | Reconnect tokens |
+
+---
+
+### E2EKeyExchange
+
+Provides the server-side signaling infrastructure for end-to-end encryption
+using the browser's **Insertable Streams API** (WebRTC Encoded Transform).
+Peers exchange ECDH public keys through the signaling channel; the server
+stores and distributes them but never sees private keys or derived secrets.
+
+```js
+const { createServer, E2EKeyExchange } = require('webrtc-rooms');
+
+const server = createServer({ port: 3000 });
+
+const e2e = new E2EKeyExchange({ server });
+e2e.attach();
+
+e2e.on('key:announced', ({ peerId, roomId, publicKey, curve }) => {
+  console.log(`${peerId} published a ${curve} public key in "${roomId}"`);
+});
+```
+
+**Options**
+
+```js
+new E2EKeyExchange({
+  server,                           // SignalingServer instance (required)
+  requireKeyOnJoin:          false, // kick peers that do not announce a key within the timeout
+  keyAnnouncementTimeoutMs:  10_000,// timeout used when requireKeyOnJoin is true
+  allowedCurves:             ['P-256', 'X25519'], // accepted ECDH curves
+});
+```
+
+**Browser-side flow**
+
+```js
+// 1. Generate an ECDH key pair
+const keyPair = await crypto.subtle.generateKey(
+  { name: 'ECDH', namedCurve: 'P-256' },
+  true,
+  ['deriveKey'],
+);
+
+// 2. Export the public key as Base64-encoded SPKI
+const raw    = await crypto.subtle.exportKey('spki', keyPair.publicKey);
+const pubKey = btoa(String.fromCharCode(...new Uint8Array(raw)));
+
+// 3. Announce through the data relay
+ws.send(JSON.stringify({
+  type:    'data',
+  payload: { __e2e: 'key:announce', publicKey: pubKey, curve: 'P-256' },
+}));
+
+// 4. Receive announcements from other peers
+// Server broadcasts: { type: 'e2e:key:announced', peerId, publicKey, curve, version }
+
+// 5. Derive a shared secret with each remote peer
+const remoteKey = await crypto.subtle.importKey('spki', base64ToBuffer(remotePubKey), { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+const sharedKey = await crypto.subtle.deriveKey(
+  { name: 'ECDH', public: remoteKey },
+  keyPair.privateKey,
+  { name: 'AES-GCM', length: 256 },
+  false,
+  ['encrypt', 'decrypt'],
+);
+
+// 6. Use sharedKey to encrypt media via Insertable Streams
+```
+
+**Key rotation**
+
+```js
+// Replace the current key (increments version, re-derives required by all peers)
+ws.send(JSON.stringify({
+  type:    'data',
+  payload: { __e2e: 'key:rotate', publicKey: newPubKey, curve: 'P-256' },
+}));
+// Server broadcasts: { type: 'e2e:key:rotated', peerId, publicKey, curve, version }
+```
+
+**Key request (late joiners)**
+
+```js
+// Request a specific peer's current key
+ws.send(JSON.stringify({
+  type:    'data',
+  payload: { __e2e: 'key:request', targetPeerId: remotePeerId },
+}));
+// Server responds: { type: 'e2e:key:response', targetPeerId, publicKey, curve, version }
+```
+
+**Server → client E2E messages**
+
+| Type                  | When sent                                              |
+|-----------------------|--------------------------------------------------------|
+| `e2e:key:snapshot`    | Sent to a peer on join with all current room keys      |
+| `e2e:key:announced`   | Broadcast when a peer publishes a key for the first time |
+| `e2e:key:rotated`     | Broadcast when a peer replaces their key               |
+| `e2e:key:revoked`     | Broadcast when a peer leaves (invalidate derived secrets) |
+| `e2e:key:confirmed`   | Sent back to the announcing/rotating peer              |
+| `e2e:key:response`    | Response to a `key:request`                            |
+| `e2e:key:not-found`   | Sent when the requested peer has no key                |
+
+**Server-side queries**
+
+```js
+// Current public key for a peer in a room
+const entry = e2e.getPeerKey('my-room', peerId);
+// → { publicKey, curve, announcedAt, version } | undefined
+
+// All keys in a room
+const keys = e2e.getRoomKeys('my-room');
+// → [{ peerId, publicKey, curve, announcedAt, version }, ...]
+
+// Summary for admin tooling
+e2e.stats();
+// → [{ roomId, peerCount }, ...]
+```
+
+**Events**
+
+```js
+e2e.on('key:announced', ({ peerId, roomId, publicKey, curve }) => { });
+e2e.on('key:rotated',   ({ peerId, roomId, publicKey, curve, version }) => { });
+e2e.on('key:revoked',   ({ peerId, roomId, entry }) => { });
+```
+
+**Security model**
+
+The server performs structural validation only (Base64 format, key length,
+curve whitelist). Cryptographic correctness — generating key pairs, performing
+ECDH, encrypting/decrypting media — happens entirely in the browser. The
+server never stores private keys, derived shared secrets, or encrypted media.
 
 ---
 
@@ -373,16 +671,16 @@ Unauthorized requests receive `401 Unauthorized`.
 
 ### Client → server
 
-| Type            | Required fields              | Description                              |
-|-----------------|------------------------------|------------------------------------------|
-| `join`          | `roomId`, `metadata?`        | Enter (or create) a room                 |
-| `reconnect`     | `token`, `roomId`            | Resume a session after socket drop       |
-| `offer`         | `target`, `sdp`              | Forward SDP offer to `target` peer       |
-| `answer`        | `target`, `sdp`              | Forward SDP answer to `target` peer      |
-| `ice-candidate` | `target`, `candidate`        | Forward ICE candidate to `target` peer   |
-| `data`          | `payload`, `target?`         | Relay payload; omit `target` to broadcast|
-| `metadata`      | `patch`                      | Update own metadata (primitives only)    |
-| `leave`         | —                            | Voluntarily exit the room                |
+| Type            | Required fields        | Description                               |
+|-----------------|------------------------|-------------------------------------------|
+| `join`          | `roomId`, `metadata?`  | Enter (or create) a room                  |
+| `reconnect`     | `token`, `roomId`      | Resume a session after socket drop        |
+| `offer`         | `target`, `sdp`        | Forward SDP offer to `target` peer        |
+| `answer`        | `target`, `sdp`        | Forward SDP answer to `target` peer       |
+| `ice-candidate` | `target`, `candidate`  | Forward ICE candidate to `target` peer    |
+| `data`          | `payload`, `target?`   | Relay payload; omit `target` to broadcast |
+| `metadata`      | `patch`                | Update own metadata (primitives only)     |
+| `leave`         | —                      | Voluntarily exit the room                 |
 
 ### Server → client
 
@@ -416,7 +714,6 @@ the `join` message) and the target `roomId`.
 const server = createServer({
   port: 3000,
   beforeJoin: async (peer, roomId) => {
-    // Read the token the browser sent in the join message
     const user = await db.verifyToken(peer.metadata.token);
 
     if (!user) return 'Invalid or expired token';
@@ -429,12 +726,11 @@ const server = createServer({
       role:        user.role,
     });
 
-    // Role-based room access
     if (user.role === 'viewer' && roomId !== 'all-hands') {
       return 'Viewers may only join the all-hands room';
     }
 
-    return true; // allow the join
+    return true;
   },
 });
 ```
@@ -466,7 +762,6 @@ sent to the peer during this window are queued (up to 32). The browser
 reconnects by sending a `reconnect` message instead of `join`:
 
 ```js
-// On reconnect:
 ws.send(JSON.stringify({
   type:   'reconnect',
   token:  sessionStorage.getItem('reconnectToken'),
@@ -476,6 +771,81 @@ ws.send(JSON.stringify({
 
 On success the server sends `room:state` with the current room snapshot. If
 the token has expired or is unknown, the peer falls back to a normal join.
+
+---
+
+## Multi-server scaling
+
+A single process keeps all state in memory. When you run multiple processes
+behind a load balancer, peers connected to different processes cannot exchange
+signaling messages without a shared bus. `RedisAdapter` solves this.
+
+```js
+const http = require('http');
+const { createServer, RedisAdapter } = require('webrtc-rooms');
+const { createClient } = require('redis');
+
+const server = createServer({ server: http.createServer().listen(3000) });
+
+const [pub, sub] = await Promise.all([
+  createClient({ url: process.env.REDIS_URL }).connect(),
+  createClient({ url: process.env.REDIS_URL }).connect(),
+]);
+
+const redis = new RedisAdapter({ pub, sub, server });
+await redis.init();
+```
+
+Each process automatically forwards signaling messages for remote peers over
+Redis pub/sub. No changes are needed to the rest of your code.
+
+---
+
+## Room persistence
+
+Use `RoomPersistence` to survive server restarts without losing room structure.
+
+```js
+const { createServer, RoomPersistence } = require('webrtc-rooms');
+const { createClient } = require('redis');
+
+const redis  = createClient({ url: process.env.REDIS_URL });
+await redis.connect();
+
+const server = createServer({ port: 3000, autoCreateRooms: false });
+
+const persistence = new RoomPersistence({ redis, server });
+
+// Restore before clients connect
+await persistence.restore();
+
+// Persist all future changes
+persistence.attach();
+```
+
+---
+
+## End-to-end encryption
+
+`E2EKeyExchange` handles ECDH public-key distribution so browsers can derive
+shared secrets and encrypt media with the Insertable Streams API. The server
+stores only public keys and never has access to derived secrets or plaintext
+media.
+
+```js
+const { createServer, E2EKeyExchange } = require('webrtc-rooms');
+
+const server = createServer({ port: 3000 });
+const e2e    = new E2EKeyExchange({
+  server,
+  requireKeyOnJoin: true, // enforce E2EE for all peers
+});
+
+e2e.attach();
+```
+
+See the [E2EKeyExchange](#e2ekeyexchange) API reference above for the complete
+browser-side flow.
 
 ---
 
@@ -489,14 +859,11 @@ const { createServer, AdminAPI, RateLimiter } = require('webrtc-rooms');
 const app        = express();
 const httpServer = http.createServer(app);
 
-// Signaling on the same port as your Express app
 const signalingServer = createServer({ server: httpServer });
 
-// Rate limiting
 const limiter = new RateLimiter({ maxConnPerMin: 20 });
 limiter.attach(signalingServer);
 
-// Admin API mounted under /admin
 const admin = new AdminAPI({
   server:      signalingServer,
   adminSecret: process.env.ADMIN_SECRET,
@@ -522,6 +889,9 @@ import {
   MediasoupAdapter,
   RateLimiter,
   AdminAPI,
+  RedisAdapter,
+  RoomPersistence,
+  E2EKeyExchange,
   // Type aliases
   PeerStateValue,
   MetadataMap,
@@ -530,6 +900,10 @@ import {
   ClientSignal,
   ServerStats,
   RoomSnapshot,
+  RemotePeerDetail,
+  RestoreResult,
+  PublicKeyEntry,
+  RoomKeyEntry,
 } from 'webrtc-rooms';
 
 const server: SignalingServer = createServer({ port: 3000 });
@@ -546,17 +920,18 @@ server.on('peer:joined', (peer: Peer, room: Room) => {
 
 ```bash
 npm install
-node tests/index.test.js
+node tests/index.test.js                  # core suite (no Redis required)
+node tests/redis-persistence-e2e.test.js  # RedisAdapter, RoomPersistence, E2EKeyExchange
 ```
 
-The suite boots real WebSocket servers on ephemeral ports and tears them down
-at the end. No test runner, no mocking framework.
+Both suites use in-process mocks. No live Redis instance, no external test
+runner, no mocking framework required.
 
 ---
 
 ## Contributing
 
-See [Contributing.md](./Contributing.md) for setup instructions, coding
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for setup instructions, coding
 standards, pull request process, and code merge rules.
 
 For project governance and decision-making, see [GOVERNANCE.md](./GOVERNANCE.md).
@@ -571,12 +946,9 @@ For support channels and issue guidelines, see [SUPPORT.md](./SUPPORT.md).
 
 ## Roadmap
 
-- Redis pub/sub adapter for multi-process / multi-server deployments
-- Room persistence (restore rooms after server restart from a Redis snapshot)
-- End-to-end encryption key-exchange helpers
-- `webrtc-rooms-client` npm package — browser SDK with auto-reconnect and
+- [ ] `webrtc-rooms-client` npm package — browser SDK with auto-reconnect and
   mediasoup-client integration
-- Prometheus metrics endpoint (`/metrics`)
+- [ ] Prometheus metrics endpoint (`/metrics`)
 
 ---
 

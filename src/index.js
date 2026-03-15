@@ -23,7 +23,10 @@ const Peer             = require('./Peer');
 const AdminAPI         = require('./AdminAPI');
 const RecordingAdapter = require('./adapters/RecordingAdapter');
 const MediasoupAdapter = require('./adapters/MediasoupAdapter');
+const RedisAdapter     = require('./adapters/RedisAdapter');
+const RoomPersistence  = require('./adapters/RoomPersistence');
 const RateLimiter      = require('./middleware/RateLimiter');
+const E2EKeyExchange   = require('./crypto/E2EKeyExchange');
 
 /**
  * Creates and returns a new {@link SignalingServer} instance.
@@ -66,9 +69,14 @@ module.exports = {
   // Adapters
   RecordingAdapter,
   MediasoupAdapter,
+  RedisAdapter,
+  RoomPersistence,
 
   // Middleware
   RateLimiter,
+
+  // Crypto
+  E2EKeyExchange,
 
   // Admin
   AdminAPI,
