@@ -9,17 +9,44 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+- No entries yet.
+
+## [1.1.0] — 2026-03-16
+
+### Added
+
+**Horizontal scaling and persistence**
+- `RedisAdapter` for cross-process signaling via Redis pub/sub.
+- `RoomPersistence` for Redis-backed room metadata snapshots and restore.
+
+**End-to-end encryption helpers**
+- `E2EKeyExchange` server-side signaling helper for E2EE key announce/rotate/revoke.
+- New E2EE message flow support documented in README.
+
+**Testing**
+- Added `tests/redis-persistence-e2e.test.js` with focused coverage for:
+  - `RedisAdapter`
+  - `RoomPersistence`
+  - `E2EKeyExchange`
+
 ### Changed
 
+- Package version bumped from `1.0.0` to `1.1.0`.
+- CI matrix expanded to include Node.js 24.
+- `npm test` now runs both the core suite and Redis/Persistence/E2E suite.
+- Policy/document file names standardized to uppercase:
+  - `CONTRIBUTING.md`
+  - `CHANGELOG.md`
 - Packaging metadata hardened for npm release quality:
-  - Added explicit `type`, `exports`, and `sideEffects` in `package.json`.
+  - Added explicit `type` and `exports` fields in `package.json`.
   - Added `LICENSE` file and normalized repository URL format.
-  - Reduced published footprint by excluding tests from tarball.
+  - Reduced published footprint by excluding `tests/` from tarball.
+  - Added `ioredis` and `redis` as optional peer dependencies.
+  - Added `@types/node` and `@types/ws` to devDependencies.
+  - Added `typecheck` script backed by `tsconfig.json`.
 - Added publish automation with npm provenance via GitHub Actions:
   - `.github/workflows/npm-publish.yml`
-  - publish command uses `npm publish --provenance --access public`.
-- Standardized advanced example naming to `examples/advanced-server.js`
-  and excluded the legacy `examples/advance-server.js` from npm artifacts.
+  - Publish command uses `npm publish --provenance --access public`.
 
 ## [1.0.0] — 2026-03-15
 

@@ -37,7 +37,7 @@ Contributors can:
 
 ## Merge policy
 
-The authoritative merge rules are in [Contributing.md](./Contributing.md).
+The authoritative merge rules are in [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 At minimum, a change must have:
 

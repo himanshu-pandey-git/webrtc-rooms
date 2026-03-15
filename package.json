@@ -1,6 +1,6 @@
 {
   "name": "webrtc-rooms",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "WebRTC signaling, room management, SFU, recording, and admin API for Node.js",
   "type": "commonjs",
   "main": "src/index.js",
@@ -12,13 +12,13 @@
     }
   },
   "types": "src/index.d.ts",
-  "sideEffects": false,
   "scripts": {
-    "test": "node tests/index.test.js",
+    "test": "node tests/index.test.js && node tests/redis-persistence-e2e.test.js",
+    "typecheck": "tsc --noEmit",
     "example": "node examples/basic-server.js",
     "example:advanced": "node examples/advanced-server.js",
-    "release:check": "node tests/index.test.js && npm pack --dry-run && npm publish --dry-run",
-    "prepublishOnly": "node tests/index.test.js"
+    "release:check": "npm test && npm run typecheck && npm pack --dry-run",
+    "prepublishOnly": "npm test && npm run typecheck"
   },
   "keywords": [
     "webrtc",
@@ -31,7 +31,10 @@
     "peer-to-peer",
     "recording",
     "real-time",
-    "websocket"
+    "websocket",
+    "redis",
+    "e2e-encryption",
+    "room-persistence"
   ],
   "author": {
     "name": "Himanshu Pandey",
@@ -46,22 +49,32 @@
     "ws": "^8.16.0"
   },
   "peerDependencies": {
-    "mediasoup": "^3.0.0"
+    "ioredis": "^5.0.0",
+    "mediasoup": "^3.0.0",
+    "redis": "^4.0.0"
   },
   "peerDependenciesMeta": {
+    "ioredis": {
+      "optional": true
+    },
     "mediasoup": {
+      "optional": true
+    },
+    "redis": {
       "optional": true
     }
   },
   "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/ws": "^8.0.0",
     "typescript": "^5.0.0"
   },
   "files": [
     "src/",
     "examples/",
     "README.md",
-    "Contributing.md",
-    "Changelog.md",
+    "CONTRIBUTING.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "repository": {
