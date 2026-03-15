@@ -8,7 +8,7 @@ started, the coding standards we follow, and the process for submitting changes.
 ## Getting started
 
 ```bash
-git clone https://github.com/himanshu-pandey/webrtc-rooms.git
+git clone https://github.com/himanshu-pandey-git/webrtc-rooms.git
 cd webrtc-rooms
 npm install
 node tests/index.test.js   # all tests should pass before you begin

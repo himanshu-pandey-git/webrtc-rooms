@@ -35,7 +35,7 @@
   ],
   "author": {
     "name": "Himanshu Pandey",
-    "url": "https://github.com/himanshu-pandey"
+    "url": "https://github.com/himanshu-pandey-git"
   },
   "license": "MIT",
   "engines": {
@@ -66,10 +66,10 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/himanshu-pandey/webrtc-rooms.git"
+    "url": "git+https://github.com/himanshu-pandey-git/webrtc-rooms.git"
   },
   "bugs": {
-    "url": "https://github.com/himanshu-pandey/webrtc-rooms/issues"
+    "url": "https://github.com/himanshu-pandey-git/webrtc-rooms/issues"
   },
-  "homepage": "https://github.com/himanshu-pandey/webrtc-rooms#readme"
+  "homepage": "https://github.com/himanshu-pandey-git/webrtc-rooms#readme"
 }
