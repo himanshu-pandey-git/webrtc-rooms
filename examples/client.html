@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<!--
+  examples/client.html
+  Browser test client for webrtc-rooms.
+
+  Open in two or more browser tabs. Each tab joins the same room using a
+  WebSocket signaling connection, then establishes a direct P2P video call.
+
+  Features:
+    - Auth token and display name sent on join
+    - Peer list with metadata and reconnect status
+    - Data relay chat (via signaling server)
+    - Automatic reconnect with token
+    - Per-message signaling log
+
+  Usage:
+    node examples/advanced-server.js
+    open examples/client.html in two tabs
+    enter room "engineering" with token "secret" and "secret2"
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>webrtc-rooms — test client</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Courier New', monospace;
+      background: #0d0d0d;
+      color: #e0e0e0;
+      padding: 16px;
+      font-size: 13px;
+    }
+
+    h1 { font-size: 11px; color: #444; letter-spacing: .14em; margin-bottom: 14px; }
+
+    /* Controls */
+    .controls {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+    input[type="text"] {
+      background: #1a1a1a;
+      border: 1px solid #2e2e2e;
+      color: #e0e0e0;
+      padding: 5px 9px;
+      border-radius: 4px;
+      font-family: inherit;
+      font-size: 12px;
+      width: 140px;
+    }
+    button {
+      background: #1c1c1c;
+      border: 1px solid #353535;
+      color: #ccc;
+      padding: 5px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 12px;
+    }
+    button:hover:not(:disabled) { background: #262626; }
+    button:disabled { opacity: .35; cursor: default; }
+    #status { margin-left: auto; font-size: 11px; color: #444; }
+
+    /* Layout */
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 200px;
+      gap: 10px;
+    }
+
+    /* Videos */
+    .video-col { }
+    .video-label { font-size: 10px; color: #444; margin-bottom: 4px; }
+    .video-wrap { position: relative; }
+    video {
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      background: #111;
+      border: 1px solid #1e1e1e;
+      border-radius: 5px;
+      display: block;
+    }
+    .vid-name {
+      position: absolute;
+      bottom: 6px;
+      left: 8px;
+      font-size: 10px;
+      color: #bbb;
+      background: rgba(0,0,0,.6);
+      padding: 2px 6px;
+      border-radius: 3px;
+    }
+
+    /* Peer list */
+    .peers-col { }
+    .peers-title { font-size: 10px; color: #444; margin-bottom: 4px; }
+    #peer-count  { font-size: 10px; color: #333; margin-bottom: 5px; }
+    #peer-list   {
+      background: #0f0f0f;
+      border: 1px solid #1c1c1c;
+      border-radius: 5px;
+      padding: 6px;
+      max-height: 160px;
+      overflow-y: auto;
+    }
+    .peer-item { font-size: 11px; padding: 3px 0; border-bottom: 1px solid #181818; color: #777; }
+    .peer-item:last-child { border-bottom: none; }
+    .peer-name { color: #ccc; }
+    .peer-role { font-size: 10px; color: #444; margin-left: 5px; }
+    .peer-recon { color: #c9882d; }
+
+    /* Chat */
+    .chat-row {
+      grid-column: 1 / 3;
+      display: flex;
+      gap: 6px;
+      margin-top: 4px;
+    }
+    #chat-input { flex: 1; }
+
+    /* Log */
+    #log {
+      grid-column: 1 / -1;
+      margin-top: 6px;
+      background: #090909;
+      border: 1px solid #181818;
+      border-radius: 5px;
+      padding: 8px;
+      height: 120px;
+      overflow-y: auto;
+      font-size: 10px;
+      line-height: 1.8;
+      color: #3a3a3a;
+    }
+    .li { color: #4a9e78; }
+    .ls { color: #5a8aad; }
+    .lr { color: #ad8e5a; }
+    .lw { color: #ada25a; }
+    .le { color: #ad5a5a; }
+
+    /* Chat log */
+    #chat-log {
+      grid-column: 1 / -1;
+      background: #0a0a0a;
+      border: 1px solid #181818;
+      border-radius: 5px;
+      padding: 7px 9px;
+      height: 90px;
+      overflow-y: auto;
+      font-size: 11px;
+      line-height: 1.8;
+    }
+    .cm { color: #4a9e78; }
+    .cp { color: #5a8aad; }
+    .cs { color: #3a3a3a; font-style: italic; }
+  </style>
+</head>
+<body>
+  <h1>WEBRTC-ROOMS &mdash; TEST CLIENT</h1>
+
+  <div class="controls">
+    <input id="roomId"   type="text" placeholder="room-id"       value="engineering">
+    <input id="token"    type="text" placeholder="token"         value="secret">
+    <input id="dispName" type="text" placeholder="display name">
+    <button id="btnJoin"  onclick="joinRoom()">Join</button>
+    <button id="btnLeave" onclick="leaveRoom()" disabled>Leave</button>
+    <span id="status">disconnected</span>
+  </div>
+
+  <div class="grid">
+    <div class="video-col">
+      <div class="video-label">Local</div>
+      <div class="video-wrap">
+        <video id="localVideo" autoplay muted playsinline></video>
+        <div class="vid-name" id="localName">&mdash;</div>
+      </div>
+    </div>
+    <div class="video-col">
+      <div class="video-label">Remote</div>
+      <div class="video-wrap">
+        <video id="remoteVideo" autoplay playsinline></video>
+        <div class="vid-name" id="remoteName">&mdash;</div>
+      </div>
+    </div>
+    <div class="peers-col">
+      <div class="peers-title">Peers in room</div>
+      <div id="peer-count">0 peers</div>
+      <div id="peer-list"><div class="peer-item" style="color:#2a2a2a">(empty)</div></div>
+    </div>
+
+    <div class="chat-row">
+      <input id="chat-input" type="text" placeholder="Send a message via data relay…" disabled
+             onkeydown="if(event.key==='Enter') sendChat()">
+      <button id="btnChat" onclick="sendChat()" disabled>Send</button>
+    </div>
+    <div></div>
+
+    <div id="chat-log" style="grid-column:1/-1"></div>
+    <div id="log" style="grid-column:1/-1"></div>
+  </div>
+
+<script>
+'use strict';
+
+const WS_URL      = 'ws://localhost:3000';
+const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
+
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+let ws             = null;
+let myPeerId       = null;
+let myName         = '';
+let reconnectToken = null;
+let currentRoomId  = null;
+let localStream    = null;
+let pcs            = {};   // peerId → RTCPeerConnection
+let knownPeers     = {};   // peerId → PeerSnapshot
+
+// ---------------------------------------------------------------------------
+// UI helpers
+// ---------------------------------------------------------------------------
+
+function log(msg, type = 'i') {
+  const el = document.getElementById('log');
+  const d = document.createElement('div');
+  d.className = 'l' + type;
+  d.textContent = `${new Date().toLocaleTimeString()}  ${msg}`;
+  el.appendChild(d);
+  el.scrollTop = el.scrollHeight;
+}
+
+function chat(line, cls) {
+  const el = document.getElementById('chat-log');
+  const d = document.createElement('div');
+  d.className = cls;
+  d.textContent = line;
+  el.appendChild(d);
+  el.scrollTop = el.scrollHeight;
+}
+
+function setStatus(s) { document.getElementById('status').textContent = s; }
+
+function renderPeers() {
+  const list  = document.getElementById('peer-list');
+  const count = document.getElementById('peer-count');
+  const peers = Object.values(knownPeers);
+  count.textContent = `${peers.length} peer${peers.length !== 1 ? 's' : ''}`;
+  if (peers.length === 0) {
+    list.innerHTML = '<div class="peer-item" style="color:#2a2a2a">(empty)</div>';
+    return;
+  }
+  list.innerHTML = peers.map((p) => {
+    const name  = p.metadata?.displayName ?? p.id.slice(0, 8);
+    const role  = p.metadata?.role  ?? '';
+    const recon = p.state === 'reconnecting';
+    return `<div class="peer-item${recon ? ' peer-recon' : ''}">
+      <span class="peer-name">${name}${recon ? ' ↺' : ''}</span>
+      <span class="peer-role">${role}</span>
+    </div>`;
+  }).join('');
+}
+
+function setControlsJoined(joined) {
+  document.getElementById('btnJoin').disabled  =  joined;
+  document.getElementById('btnLeave').disabled = !joined;
+  document.getElementById('chat-input').disabled = !joined;
+  document.getElementById('btnChat').disabled    = !joined;
+}
+
+// ---------------------------------------------------------------------------
+// Join / leave
+// ---------------------------------------------------------------------------
+
+async function joinRoom() {
+  const roomId = document.getElementById('roomId').value.trim();
+  const token  = document.getElementById('token').value.trim();
+  const disp   = document.getElementById('dispName').value.trim();
+  if (!roomId) { alert('Enter a room ID.'); return; }
+
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    document.getElementById('localVideo').srcObject = localStream;
+  } catch (err) {
+    log('Could not access camera/mic: ' + err.message, 'e');
+    return;
+  }
+
+  myName = disp || `peer-${Math.random().toString(36).slice(2, 6)}`;
+  document.getElementById('localName').textContent = myName + ' (you)';
+  currentRoomId = roomId;
+  openWs(roomId, token, null);
+  setControlsJoined(true);
+}
+
+function leaveRoom() {
+  if (ws) { wsSend({ type: 'leave' }); ws.close(); ws = null; }
+  cleanupAll();
+  reconnectToken = null;
+  currentRoomId  = null;
+  setControlsJoined(false);
+  setStatus('disconnected');
+}
+
+// ---------------------------------------------------------------------------
+// WebSocket
+// ---------------------------------------------------------------------------
+
+function openWs(roomId, token, reconToken) {
+  ws = new WebSocket(WS_URL);
+  setStatus('connecting…');
+
+  ws.onopen = () => log('WebSocket connected', 'i');
+
+  ws.onmessage = ({ data }) => handleMsg(JSON.parse(data));
+
+  ws.onclose = () => {
+    setStatus('disconnected');
+    log('WebSocket closed', 'w');
+    // Attempt automatic reconnect if we still have a valid token.
+    if (reconnectToken && currentRoomId) {
+      log('Reconnecting in 2 s…', 'w');
+      setTimeout(() => {
+        if (reconnectToken) openWs(currentRoomId, token, reconnectToken);
+      }, 2000);
+    }
+  };
+
+  ws.onerror = () => log('WebSocket error', 'e');
+
+  // Wait for the 'connected' handshake, then join or reconnect.
+  ws.addEventListener('message', function firstMsg({ data }) {
+    const msg = JSON.parse(data);
+    if (msg.type !== 'connected') return;
+    ws.removeEventListener('message', firstMsg);
+    myPeerId = msg.peerId;
+
+    if (reconToken) {
+      log(`Reconnecting as ${myPeerId.slice(0, 8)}…`, 'w');
+      wsSend({ type: 'reconnect', token: reconToken, roomId });
+    } else {
+      log(`Peer ID: ${myPeerId.slice(0, 8)}`, 'i');
+      wsSend({ type: 'join', roomId, metadata: { token, displayName: myName } });
+    }
+  });
+}
+
+function wsSend(obj) {
+  if (ws?.readyState === WebSocket.OPEN) {
+    log(`→ ${obj.type}${obj.target ? ' → ' + obj.target.slice(0, 8) : ''}`, 's');
+    ws.send(JSON.stringify(obj));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Message dispatch
+// ---------------------------------------------------------------------------
+
+async function handleMsg(msg) {
+  switch (msg.type) {
+
+    case 'room:joined':
+      setStatus(`in "${msg.roomId}"`);
+      if (msg.reconnectToken) reconnectToken = msg.reconnectToken;
+      knownPeers = {};
+      msg.peers.forEach((p) => { knownPeers[p.id] = p; });
+      renderPeers();
+      log(`Joined room "${msg.roomId}". ${msg.peers.length} existing peer(s).`, 'i');
+      for (const p of msg.peers) await createOffer(p.id);
+      break;
+
+    case 'room:state':
+      knownPeers = {};
+      msg.peers.forEach((p) => { knownPeers[p.id] = p; });
+      renderPeers();
+      log('Reconnected — room state restored.', 'i');
+      break;
+
+    case 'peer:joined':
+      knownPeers[msg.peer.id] = msg.peer;
+      renderPeers();
+      log(`Peer joined: ${msg.peer.metadata?.displayName ?? msg.peer.id.slice(0, 8)}`, 'r');
+      chat(`${msg.peer.metadata?.displayName ?? 'A peer'} joined.`, 'cs');
+      pcs[msg.peer.id] = makePc(msg.peer.id);
+      break;
+
+    case 'peer:left': {
+      const name = knownPeers[msg.peerId]?.metadata?.displayName ?? msg.peerId.slice(0, 8);
+      delete knownPeers[msg.peerId];
+      renderPeers();
+      log(`Peer left: ${name}`, 'w');
+      chat(`${name} left.`, 'cs');
+      pcs[msg.peerId]?.close();
+      delete pcs[msg.peerId];
+      document.getElementById('remoteVideo').srcObject = null;
+      document.getElementById('remoteName').textContent = '—';
+      break;
+    }
+
+    case 'peer:updated':
+      if (knownPeers[msg.peerId]) {
+        Object.assign(knownPeers[msg.peerId].metadata, msg.patch);
+        renderPeers();
+      }
+      break;
+
+    case 'peer:reconnected':
+      knownPeers[msg.peer.id] = msg.peer;
+      renderPeers();
+      chat(`${msg.peer.metadata?.displayName ?? 'A peer'} reconnected.`, 'cs');
+      break;
+
+    case 'offer':
+      log(`← offer from ${msg.from.slice(0, 8)}`, 'r');
+      await handleOffer(msg.from, msg.sdp);
+      break;
+
+    case 'answer':
+      await pcs[msg.from]?.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+      break;
+
+    case 'ice-candidate':
+      try { await pcs[msg.from]?.addIceCandidate(new RTCIceCandidate(msg.candidate)); } catch {}
+      break;
+
+    case 'data': {
+      const sender = knownPeers[msg.from]?.metadata?.displayName ?? msg.from.slice(0, 8);
+      chat(`${sender}: ${msg.payload}`, 'cp');
+      break;
+    }
+
+    case 'kicked':
+      log(`Kicked: ${msg.reason}`, 'e');
+      leaveRoom();
+      alert(`You were removed: ${msg.reason}`);
+      break;
+
+    case 'error':
+      log(`Error ${msg.code}: ${msg.message ?? ''}`, 'e');
+      break;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// WebRTC helpers
+// ---------------------------------------------------------------------------
+
+function makePc(remotePeerId) {
+  const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+
+  pc.onicecandidate = ({ candidate }) => {
+    if (candidate) wsSend({ type: 'ice-candidate', target: remotePeerId, candidate });
+  };
+
+  pc.ontrack = ({ streams }) => {
+    const name = knownPeers[remotePeerId]?.metadata?.displayName ?? remotePeerId.slice(0, 8);
+    document.getElementById('remoteVideo').srcObject = streams[0];
+    document.getElementById('remoteName').textContent = name;
+  };
+
+  if (localStream) {
+    localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
+  }
+
+  return pc;
+}
+
+async function createOffer(remotePeerId) {
+  const pc = makePc(remotePeerId);
+  pcs[remotePeerId] = pc;
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  wsSend({ type: 'offer', target: remotePeerId, sdp: pc.localDescription });
+}
+
+async function handleOffer(remotePeerId, sdp) {
+  const pc = pcs[remotePeerId] ?? makePc(remotePeerId);
+  pcs[remotePeerId] = pc;
+  await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+  const answer = await pc.createAnswer();
+  await pc.setLocalDescription(answer);
+  wsSend({ type: 'answer', target: remotePeerId, sdp: pc.localDescription });
+}
+
+function cleanupAll() {
+  Object.values(pcs).forEach((pc) => pc.close());
+  pcs = {};
+  localStream?.getTracks().forEach((t) => t.stop());
+  localStream = null;
+  document.getElementById('localVideo').srcObject  = null;
+  document.getElementById('remoteVideo').srcObject = null;
+  document.getElementById('localName').textContent  = '—';
+  document.getElementById('remoteName').textContent = '—';
+  knownPeers = {};
+  renderPeers();
+}
+
+// ---------------------------------------------------------------------------
+// Data relay chat
+// ---------------------------------------------------------------------------
+
+function sendChat() {
+  const input = document.getElementById('chat-input');
+  const text  = input.value.trim();
+  if (!text) return;
+  wsSend({ type: 'data', payload: text });
+  chat(`you: ${text}`, 'cm');
+  input.value = '';
+}
+</script>
+</body>
+</html>

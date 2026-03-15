@@ -1,0 +1,75 @@
+{
+  "name": "webrtc-rooms",
+  "version": "1.0.0",
+  "description": "WebRTC signaling, room management, SFU, recording, and admin API for Node.js",
+  "type": "commonjs",
+  "main": "src/index.js",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "require": "./src/index.js",
+      "default": "./src/index.js"
+    }
+  },
+  "types": "src/index.d.ts",
+  "sideEffects": false,
+  "scripts": {
+    "test": "node tests/index.test.js",
+    "example": "node examples/basic-server.js",
+    "example:advanced": "node examples/advanced-server.js",
+    "release:check": "node tests/index.test.js && npm pack --dry-run && npm publish --dry-run",
+    "prepublishOnly": "node tests/index.test.js"
+  },
+  "keywords": [
+    "webrtc",
+    "signaling",
+    "rooms",
+    "sfu",
+    "mediasoup",
+    "video",
+    "audio",
+    "peer-to-peer",
+    "recording",
+    "real-time",
+    "websocket"
+  ],
+  "author": {
+    "name": "Himanshu Pandey",
+    "url": "https://github.com/himanshu-pandey"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "uuid": "^9.0.0",
+    "ws": "^8.16.0"
+  },
+  "peerDependencies": {
+    "mediasoup": "^3.0.0"
+  },
+  "peerDependenciesMeta": {
+    "mediasoup": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "files": [
+    "src/",
+    "examples/",
+    "README.md",
+    "Contributing.md",
+    "Changelog.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/himanshu-pandey/webrtc-rooms.git"
+  },
+  "bugs": {
+    "url": "https://github.com/himanshu-pandey/webrtc-rooms/issues"
+  },
+  "homepage": "https://github.com/himanshu-pandey/webrtc-rooms#readme"
+}
