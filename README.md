@@ -1,6 +1,8 @@
 # webrtc-rooms
 
 [![npm version](https://img.shields.io/npm/v/webrtc-rooms.svg)](https://www.npmjs.com/package/webrtc-rooms)
+[![CI](https://github.com/himanshu-pandey-git/webrtc-rooms/actions/workflows/ci.yml/badge.svg)](https://github.com/himanshu-pandey-git/webrtc-rooms/actions/workflows/ci.yml)
+[![release](https://img.shields.io/github/v/release/himanshu-pandey-git/webrtc-rooms)](https://github.com/himanshu-pandey-git/webrtc-rooms/releases)
 [![license](https://img.shields.io/npm/l/webrtc-rooms.svg)](./LICENSE)
 [![node](https://img.shields.io/node/v/webrtc-rooms.svg)](https://nodejs.org)
 
@@ -554,8 +556,14 @@ at the end. No test runner, no mocking framework.
 
 ## Contributing
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for setup instructions, coding
+See [Contributing.md](./Contributing.md) for setup instructions, coding
 standards, and the pull request process.
+
+For security reports, see [SECURITY.md](./SECURITY.md).
+
+For community standards, see [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md).
+
+For support channels and issue guidelines, see [SUPPORT.md](./SUPPORT.md).
 
 ---
 
