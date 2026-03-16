@@ -10,6 +10,10 @@
 
 const { EventEmitter } = require('events');
 
+// Imported here (not at top-level from Peer) to avoid a circular dependency
+// between Room ↔ Peer at module load time. We only need the State constants.
+const PeerState = require('./Peer').State;
+
 /**
  * A Room holds a set of {@link Peer} instances and acts as the central message
  * bus for all WebRTC signaling happening between them.
@@ -377,7 +381,7 @@ class Room extends EventEmitter {
     }
 
     peer.roomId = this.id;
-    peer.state = require('./Peer').State.JOINED;
+    peer.state = PeerState.JOINED;
 
     peer.send({
       type: 'room:joined',

@@ -23,8 +23,11 @@ const path = require('path');
 const fs = require('fs');
 
 /**
- * Maximum number of messages buffered in ffmpeg's stdin pipe before the
- * process is considered unresponsive and the recording is aborted.
+ * Milliseconds to wait for ffmpeg to flush its output buffers and exit cleanly
+ * after stdin is closed. If ffmpeg has not exited within this window the process
+ * is force-killed with SIGKILL to prevent zombie processes.
+ *
+ * @constant {number}
  */
 const FFMPEG_FLUSH_TIMEOUT_MS = 5_000;
 
