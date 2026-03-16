@@ -11,6 +11,21 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 - No entries yet.
 
+## [1.1.1] — 2026-03-16
+
+### Fixed
+
+- `Room.js` — use module-level `PeerState` constant for peer state assignment
+  in `addPeer` instead of an inline `require('./Peer')` on every call
+- `RecordingAdapter` — corrected `FFMPEG_FLUSH_TIMEOUT_MS` comment; it
+  describes a flush timeout, not a message buffer count
+- `tsconfig.json` — add `ignoreDeprecations: "6.0"` to silence the
+  `moduleResolution: node` deprecation warning without changing resolution behaviour
+
+### Changed
+
+- `package.json` — version `1.1.0` to `1.1.1`
+
 ## [1.1.0] — 2026-03-16
 
 ### Added
