@@ -19,8 +19,9 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   in `addPeer` instead of an inline `require('./Peer')` on every call
 - `RecordingAdapter` — corrected `FFMPEG_FLUSH_TIMEOUT_MS` comment; it
   describes a flush timeout, not a message buffer count
-- `tsconfig.json` — add `ignoreDeprecations: "6.0"` to silence the
-  `moduleResolution: node` deprecation warning without changing resolution behaviour
+- `tsconfig.json` — migrate TypeScript module settings to
+  `module: "node16"` and `moduleResolution: "node16"` to resolve the
+  `moduleResolution: node10` deprecation warning without using suppression
 
 ### Changed
 

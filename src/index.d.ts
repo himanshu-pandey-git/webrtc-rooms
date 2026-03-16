@@ -6,7 +6,7 @@
 
 import { EventEmitter } from 'events';
 import { Server as HttpServer } from 'http';
-import WebSocket from 'ws';
+import { WebSocket } from 'ws';
 
 // ---------------------------------------------------------------------------
 // Peer state
