@@ -1,4 +1,4 @@
-'use strict';
+"use strict";
 
 /**
  * @file Room.js
@@ -8,11 +8,11 @@
  * @module webrtc-rooms/Room
  */
 
-const { EventEmitter } = require('events');
+const { EventEmitter } = require("events");
 
 // Imported here (not at top-level from Peer) to avoid a circular dependency
 // between Room ↔ Peer at module load time. We only need the State constants.
-const PeerState = require('./Peer').State;
+const PeerState = require("./Peer").State;
 
 /**
  * A Room holds a set of {@link Peer} instances and acts as the central message
@@ -110,7 +110,9 @@ class Room extends EventEmitter {
   _routeTo(targetId, msg) {
     const target = this.peers.get(targetId);
     if (!target) {
-      console.warn(`[webrtc-rooms] Room "${this.id}": routeTo unknown peer "${targetId}"`);
+      console.warn(
+        `[webrtc-rooms] Room "${this.id}": routeTo unknown peer "${targetId}"`,
+      );
       return;
     }
     target.send(msg);
@@ -123,9 +125,9 @@ class Room extends EventEmitter {
    * @param {import('./Peer')} peer
    */
   _bindPeerSignals(peer) {
-    peer.on('signal', (msg) => this._handleSignal(peer, msg));
-    peer.on('disconnect', () => this._removePeer(peer));
-    peer.on('reconnected', () => this._onPeerReconnected(peer));
+    peer.on("signal", (msg) => this._handleSignal(peer, msg));
+    peer.on("disconnect", () => this._removePeer(peer));
+    peer.on("reconnected", () => this._onPeerReconnected(peer));
   }
 
   /**
@@ -146,14 +148,15 @@ class Room extends EventEmitter {
    */
   _handleSignal(peer, msg) {
     switch (msg.type) {
-
       // -----------------------------------------------------------------------
       // WebRTC signaling — offer / answer / ICE
       // -----------------------------------------------------------------------
 
-      case 'offer': {
+      case "offer": {
         if (!msg.target || !msg.sdp) {
-          console.warn(`[webrtc-rooms] Room "${this.id}": malformed offer from "${peer.id}"`);
+          console.warn(
+            `[webrtc-rooms] Room "${this.id}": malformed offer from "${peer.id}"`,
+          );
           return;
         }
         /**
@@ -162,14 +165,20 @@ class Room extends EventEmitter {
          * @param {string}           to     - Target peer ID.
          * @param {object}           sdp    - RTCSessionDescriptionInit.
          */
-        this.emit('offer', peer, msg.target, msg.sdp);
-        this._routeTo(msg.target, { type: 'offer', from: peer.id, sdp: msg.sdp });
+        this.emit("offer", peer, msg.target, msg.sdp);
+        this._routeTo(msg.target, {
+          type: "offer",
+          from: peer.id,
+          sdp: msg.sdp,
+        });
         break;
       }
 
-      case 'answer': {
+      case "answer": {
         if (!msg.target || !msg.sdp) {
-          console.warn(`[webrtc-rooms] Room "${this.id}": malformed answer from "${peer.id}"`);
+          console.warn(
+            `[webrtc-rooms] Room "${this.id}": malformed answer from "${peer.id}"`,
+          );
           return;
         }
         /**
@@ -178,14 +187,20 @@ class Room extends EventEmitter {
          * @param {string}           to
          * @param {object}           sdp
          */
-        this.emit('answer', peer, msg.target, msg.sdp);
-        this._routeTo(msg.target, { type: 'answer', from: peer.id, sdp: msg.sdp });
+        this.emit("answer", peer, msg.target, msg.sdp);
+        this._routeTo(msg.target, {
+          type: "answer",
+          from: peer.id,
+          sdp: msg.sdp,
+        });
         break;
       }
 
-      case 'ice-candidate': {
+      case "ice-candidate": {
         if (!msg.target || !msg.candidate) {
-          console.warn(`[webrtc-rooms] Room "${this.id}": malformed ICE candidate from "${peer.id}"`);
+          console.warn(
+            `[webrtc-rooms] Room "${this.id}": malformed ICE candidate from "${peer.id}"`,
+          );
           return;
         }
         /**
@@ -194,9 +209,9 @@ class Room extends EventEmitter {
          * @param {string}           to
          * @param {object}           candidate - RTCIceCandidateInit.
          */
-        this.emit('ice-candidate', peer, msg.target, msg.candidate);
+        this.emit("ice-candidate", peer, msg.target, msg.candidate);
         this._routeTo(msg.target, {
-          type: 'ice-candidate',
+          type: "ice-candidate",
           from: peer.id,
           candidate: msg.candidate,
         });
@@ -217,12 +232,12 @@ class Room extends EventEmitter {
       //   { type: 'data', from: <peerId>, payload: <any> }
       // -----------------------------------------------------------------------
 
-      case 'data': {
+      case "data": {
         if (msg.payload === undefined) {
-          peer.send({ type: 'error', code: 'MISSING_PAYLOAD' });
+          peer.send({ type: "error", code: "MISSING_PAYLOAD" });
           return;
         }
-        const outbound = { type: 'data', from: peer.id, payload: msg.payload };
+        const outbound = { type: "data", from: peer.id, payload: msg.payload };
 
         if (msg.target) {
           /**
@@ -231,10 +246,10 @@ class Room extends EventEmitter {
            * @param {string|null}      to      - Target peer ID, or `null` for broadcast.
            * @param {*}                payload - Application payload.
            */
-          this.emit('data', peer, msg.target, msg.payload);
+          this.emit("data", peer, msg.target, msg.payload);
           this._routeTo(msg.target, outbound);
         } else {
-          this.emit('data', peer, null, msg.payload);
+          this.emit("data", peer, null, msg.payload);
           this.broadcast(outbound, { exclude: peer.id });
         }
         break;
@@ -256,19 +271,26 @@ class Room extends EventEmitter {
       //   - Nested objects are not permitted.
       // -----------------------------------------------------------------------
 
-      case 'metadata': {
-        if (!msg.patch || typeof msg.patch !== 'object' || Array.isArray(msg.patch)) {
-          peer.send({ type: 'error', code: 'INVALID_METADATA_PATCH' });
+      case "metadata": {
+        if (
+          !msg.patch ||
+          typeof msg.patch !== "object" ||
+          Array.isArray(msg.patch)
+        ) {
+          peer.send({ type: "error", code: "INVALID_METADATA_PATCH" });
           return;
         }
 
         for (const [key, value] of Object.entries(msg.patch)) {
-          if (typeof key !== 'string') {
-            peer.send({ type: 'error', code: 'INVALID_METADATA_KEY' });
+          if (typeof key !== "string") {
+            peer.send({ type: "error", code: "INVALID_METADATA_KEY" });
             return;
           }
-          if (value !== null && !['string', 'number', 'boolean'].includes(typeof value)) {
-            peer.send({ type: 'error', code: 'INVALID_METADATA_VALUE', key });
+          if (
+            value !== null &&
+            !["string", "number", "boolean"].includes(typeof value)
+          ) {
+            peer.send({ type: "error", code: "INVALID_METADATA_VALUE", key });
             return;
           }
         }
@@ -279,16 +301,16 @@ class Room extends EventEmitter {
          * @param {import('./Peer')} peer  - The peer whose metadata changed.
          * @param {object}           patch - The exact patch that was applied.
          */
-        this.emit('peer:updated', peer, msg.patch);
+        this.emit("peer:updated", peer, msg.patch);
 
         // Broadcast only the delta to avoid redundant data on large metadata objects.
         this.broadcast(
-          { type: 'peer:updated', peerId: peer.id, patch: msg.patch },
+          { type: "peer:updated", peerId: peer.id, patch: msg.patch },
           { exclude: peer.id },
         );
 
         // Confirm the full updated metadata back to the sender.
-        peer.send({ type: 'metadata:updated', metadata: updated });
+        peer.send({ type: "metadata:updated", metadata: updated });
         break;
       }
 
@@ -296,7 +318,7 @@ class Room extends EventEmitter {
       // Voluntary leave
       // -----------------------------------------------------------------------
 
-      case 'leave':
+      case "leave":
         this._removePeer(peer);
         break;
 
@@ -320,13 +342,13 @@ class Room extends EventEmitter {
     this.peers.delete(peer.id);
     peer.roomId = null;
 
-    this.broadcast({ type: 'peer:left', peerId: peer.id });
+    this.broadcast({ type: "peer:left", peerId: peer.id });
 
     /**
      * @event Room#peer:left
      * @param {import('./Peer')} peer - The peer that left.
      */
-    this.emit('peer:left', peer);
+    this.emit("peer:left", peer);
   }
 
   /**
@@ -339,7 +361,7 @@ class Room extends EventEmitter {
   _onPeerReconnected(peer) {
     // Send the reconnecting peer a complete snapshot of the current room state.
     peer.send({
-      type: 'room:state',
+      type: "room:state",
       roomId: this.id,
       peers: [...this.peers.values()]
         .filter((p) => p.id !== peer.id)
@@ -349,7 +371,7 @@ class Room extends EventEmitter {
 
     // Notify everyone else that this peer is back.
     this.broadcast(
-      { type: 'peer:reconnected', peer: peer.toJSON() },
+      { type: "peer:reconnected", peer: peer.toJSON() },
       { exclude: peer.id },
     );
 
@@ -357,7 +379,7 @@ class Room extends EventEmitter {
      * @event Room#peer:reconnected
      * @param {import('./Peer')} peer - The peer that reconnected.
      */
-    this.emit('peer:reconnected', peer);
+    this.emit("peer:reconnected", peer);
   }
 
   // ---------------------------------------------------------------------------
@@ -376,7 +398,7 @@ class Room extends EventEmitter {
    */
   addPeer(peer) {
     if (this.peers.size >= this.maxPeers) {
-      peer.send({ type: 'error', code: 'ROOM_FULL', roomId: this.id });
+      peer.send({ type: "error", code: "ROOM_FULL", roomId: this.id });
       return false;
     }
 
@@ -384,18 +406,20 @@ class Room extends EventEmitter {
     peer.state = PeerState.JOINED;
 
     peer.send({
-      type: 'room:joined',
+      type: "room:joined",
       roomId: this.id,
       peerId: peer.id,
       peers: [...this.peers.values()].map((p) => p.toJSON()),
       metadata: this.metadata,
       // Reconnect token is included so the client can persist it locally.
       ...(peer.reconnectToken ? { reconnectToken: peer.reconnectToken } : {}),
+      // TURN credentials injected by SignalingServer when turn option is set.
+      ...(peer._iceServers ? { iceServers: peer._iceServers } : {}),
     });
 
     // Announce to existing members before adding to the map so the new peer
     // does not receive its own join announcement.
-    this.broadcast({ type: 'peer:joined', peer: peer.toJSON() });
+    this.broadcast({ type: "peer:joined", peer: peer.toJSON() });
 
     this.peers.set(peer.id, peer);
     this._bindPeerSignals(peer);
@@ -404,7 +428,7 @@ class Room extends EventEmitter {
      * @event Room#peer:joined
      * @param {import('./Peer')} peer - The peer that joined.
      */
-    this.emit('peer:joined', peer);
+    this.emit("peer:joined", peer);
     return true;
   }
 
@@ -473,7 +497,7 @@ class Room extends EventEmitter {
    */
   setMetadata(patch) {
     Object.assign(this.metadata, patch);
-    this.broadcast({ type: 'room:updated', patch });
+    this.broadcast({ type: "room:updated", patch });
   }
 
   /**

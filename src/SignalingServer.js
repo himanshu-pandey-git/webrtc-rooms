@@ -1,4 +1,4 @@
-'use strict';
+"use strict";
 
 /**
  * @file SignalingServer.js
@@ -9,11 +9,13 @@
  * @module webrtc-rooms/SignalingServer
  */
 
-const { WebSocketServer } = require('ws');
-const { EventEmitter } = require('events');
-const { v4: uuidv4 } = require('uuid');
-const Peer = require('./Peer');
-const Room = require('./Room');
+const { WebSocketServer } = require("ws");
+const { EventEmitter } = require("events");
+const { v4: uuidv4 } = require("uuid");
+const Peer = require("./Peer");
+const Room = require("./Room");
+const RoomToken = require("./auth/RoomToken");
+const TurnCredentials = require("./turn/TurnCredentials");
 
 /**
  * The SignalingServer creates and manages a WebSocket server that handles all
@@ -117,6 +119,22 @@ class SignalingServer extends EventEmitter {
    *     peer.setMetadata({ userId: user.id, displayName: user.name, token: null });
    *     return true;
    *   }
+   * @param {string}    [options.apiSecret=null]
+   *   When set, the server automatically verifies `RoomToken` JWTs sent in
+   *   `peer.metadata.token` on every join. Verified claims are merged into
+   *   peer metadata; the raw token is stripped before broadcast.
+   *   Peers without a valid token are rejected with `JOIN_REJECTED`.
+   *   Setting `apiSecret` does not prevent you from also using `beforeJoin`
+   *   for additional logic.
+   * @param {object}    [options.turn=null]
+   *   When set, the server generates short-lived TURN credentials per-peer
+   *   and injects them into the `room:joined` message as `iceServers`.
+   * @param {string}    options.turn.secret
+   *   The TURN shared secret (coturn `static-auth-secret`).
+   * @param {string[]}  options.turn.urls
+   *   TURN server URLs, e.g. `['turn:turn.example.com:3478']`.
+   * @param {number}   [options.turn.ttl=86400]
+   *   Credential lifetime in seconds. Defaults to 24 hours.
    */
   constructor({
     port = 3000,
@@ -127,6 +145,8 @@ class SignalingServer extends EventEmitter {
     pingInterval = 30_000,
     reconnectTtl = 0,
     beforeJoin = null,
+    apiSecret = null,
+    turn = null,
   } = {}) {
     super();
 
@@ -140,6 +160,18 @@ class SignalingServer extends EventEmitter {
      * @type {Function|null}
      */
     this.beforeJoin = beforeJoin;
+
+    /**
+     * Optional API secret for automatic `RoomToken` JWT verification.
+     * @type {string|null}
+     */
+    this.apiSecret = apiSecret;
+
+    /**
+     * Optional TURN credential generator. Populated when `turn` option is set.
+     * @type {TurnCredentials|null}
+     */
+    this._turn = turn ? new TurnCredentials(turn) : null;
 
     /**
      * All active rooms, keyed by room ID.
@@ -166,17 +198,19 @@ class SignalingServer extends EventEmitter {
     const wssOptions = server ? { server } : { port };
     this.wss = new WebSocketServer(wssOptions);
 
-    this.wss.on('listening', () => {
+    this.wss.on("listening", () => {
       const addr = this.wss.address();
-      console.log(`[webrtc-rooms] Signaling server listening on port ${addr.port}`);
+      console.log(
+        `[webrtc-rooms] Signaling server listening on port ${addr.port}`,
+      );
       /**
        * @event SignalingServer#listening
        * @param {{ port: number }} address
        */
-      this.emit('listening', addr);
+      this.emit("listening", addr);
     });
 
-    this.wss.on('connection', (socket) => this._onConnection(socket));
+    this.wss.on("connection", (socket) => this._onConnection(socket));
 
     this._pingTimer = setInterval(() => this._heartbeat(), pingInterval);
   }
@@ -195,7 +229,11 @@ class SignalingServer extends EventEmitter {
    * @param {object} socket - Raw `ws` WebSocket instance.
    */
   _onConnection(socket) {
-    const peer = new Peer({ id: uuidv4(), socket, reconnectTtl: this.reconnectTtl });
+    const peer = new Peer({
+      id: uuidv4(),
+      socket,
+      reconnectTtl: this.reconnectTtl,
+    });
 
     this.peers.set(peer.id, peer);
 
@@ -204,32 +242,33 @@ class SignalingServer extends EventEmitter {
     }
 
     // Immediately acknowledge the connection with the peer's assigned ID.
-    peer.send({ type: 'connected', peerId: peer.id });
+    peer.send({ type: "connected", peerId: peer.id });
 
     /**
      * @event SignalingServer#peer:connected
      * @param {Peer} peer
      */
-    this.emit('peer:connected', peer);
+    this.emit("peer:connected", peer);
 
     // The very first message from a new peer must be either 'join' or
     // 'reconnect'. Any other type closes the connection immediately.
-    peer.once('signal', (msg) => {
-      if (msg.type === 'reconnect') {
+    peer.once("signal", (msg) => {
+      if (msg.type === "reconnect") {
         this._handleReconnect(peer, msg);
-      } else if (msg.type === 'join') {
+      } else if (msg.type === "join") {
         this._handleJoin(peer, msg);
       } else {
         peer.send({
-          type: 'error',
-          code: 'MUST_JOIN_FIRST',
-          message: 'First message must be { type: "join" } or { type: "reconnect" }.',
+          type: "error",
+          code: "MUST_JOIN_FIRST",
+          message:
+            'First message must be { type: "join" } or { type: "reconnect" }.',
         });
-        peer.close(1008, 'Protocol violation');
+        peer.close(1008, "Protocol violation");
       }
     });
 
-    peer.on('disconnect', () => {
+    peer.on("disconnect", () => {
       this.peers.delete(peer.id);
 
       // If the peer entered a reconnect window, keep the token index intact so
@@ -249,7 +288,9 @@ class SignalingServer extends EventEmitter {
 
     // Tag the socket for heartbeat tracking.
     socket.isAlive = true;
-    socket.on('pong', () => { socket.isAlive = true; });
+    socket.on("pong", () => {
+      socket.isAlive = true;
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -267,38 +308,95 @@ class SignalingServer extends EventEmitter {
   async _handleJoin(peer, msg) {
     const { roomId } = msg;
 
-    if (!roomId || typeof roomId !== 'string' || !roomId.trim()) {
-      peer.send({ type: 'error', code: 'INVALID_ROOM_ID' });
-      peer.close(1008, 'Invalid roomId');
+    if (!roomId || typeof roomId !== "string" || !roomId.trim()) {
+      peer.send({ type: "error", code: "INVALID_ROOM_ID" });
+      peer.close(1008, "Invalid roomId");
       return;
     }
 
     // Populate metadata from the join message before the auth hook runs
     // so the hook can read fields like `token`, `displayName`, etc.
-    if (msg.metadata && typeof msg.metadata === 'object' && !Array.isArray(msg.metadata)) {
+    if (
+      msg.metadata &&
+      typeof msg.metadata === "object" &&
+      !Array.isArray(msg.metadata)
+    ) {
       peer.setMetadata(msg.metadata);
     }
 
+    // ── Automatic RoomToken verification ────────────────────────────────────
+    // When apiSecret is configured, every peer must present a valid signed
+    // token in metadata.token. Claims are merged into metadata; the raw
+    // token string is stripped so it is never broadcast to other peers.
+    if (this.apiSecret) {
+      const rawToken = peer.metadata.token;
+
+      if (!rawToken || typeof rawToken !== "string") {
+        peer.send({
+          type: "error",
+          code: "TOKEN_REQUIRED",
+          message: "A valid room token is required.",
+        });
+        this.emit("join:rejected", peer, "TOKEN_REQUIRED");
+        peer.close(1008, "Token required");
+        return;
+      }
+
+      const claims = RoomToken.verifyOrNull(rawToken, this.apiSecret);
+
+      if (!claims) {
+        peer.send({
+          type: "error",
+          code: "TOKEN_INVALID",
+          message: "Token is invalid or has expired.",
+        });
+        this.emit("join:rejected", peer, "TOKEN_INVALID");
+        peer.close(1008, "Invalid token");
+        return;
+      }
+
+      if (claims.room && claims.room !== roomId) {
+        peer.send({
+          type: "error",
+          code: "TOKEN_ROOM_MISMATCH",
+          message: `Token is not valid for room "${roomId}".`,
+        });
+        this.emit("join:rejected", peer, "TOKEN_ROOM_MISMATCH");
+        peer.close(1008, "Token room mismatch");
+        return;
+      }
+
+      // Merge verified claims into metadata and strip the raw token.
+      peer.setMetadata({
+        token: null,
+        tokenSub: claims.sub ?? null,
+        canPublish: claims.pub ?? false,
+        canSubscribe: claims.sub_media ?? false,
+        ...claims.meta,
+      });
+    }
+
+    // ── beforeJoin hook ──────────────────────────────────────────────────────
     if (this.beforeJoin) {
       let result;
       try {
         result = await this.beforeJoin(peer, roomId);
       } catch (err) {
-        console.error('[webrtc-rooms] beforeJoin hook threw an error:', err);
-        peer.send({ type: 'error', code: 'AUTH_ERROR', message: err.message });
-        peer.close(1008, 'Auth error');
+        console.error("[webrtc-rooms] beforeJoin hook threw an error:", err);
+        peer.send({ type: "error", code: "AUTH_ERROR", message: err.message });
+        peer.close(1008, "Auth error");
         return;
       }
 
-      if (result === false || typeof result === 'string') {
-        const reason = typeof result === 'string' ? result : 'Join rejected';
-        peer.send({ type: 'error', code: 'JOIN_REJECTED', message: reason });
+      if (result === false || typeof result === "string") {
+        const reason = typeof result === "string" ? result : "Join rejected";
+        peer.send({ type: "error", code: "JOIN_REJECTED", message: reason });
         /**
          * @event SignalingServer#join:rejected
          * @param {Peer}   peer
          * @param {string} reason
          */
-        this.emit('join:rejected', peer, reason);
+        this.emit("join:rejected", peer, reason);
         peer.close(1008, reason);
         return;
       }
@@ -309,6 +407,8 @@ class SignalingServer extends EventEmitter {
 
   /**
    * Looks up or creates the target room and adds the peer to it.
+   * If TURN credentials are configured, generates per-peer credentials and
+   * injects them into the `room:joined` message via Room's `addPeer`.
    *
    * @private
    * @param {Peer}   peer
@@ -319,11 +419,17 @@ class SignalingServer extends EventEmitter {
 
     if (!room) {
       if (!this.autoCreateRooms) {
-        peer.send({ type: 'error', code: 'ROOM_NOT_FOUND', roomId });
-        peer.close(1008, 'Room not found');
+        peer.send({ type: "error", code: "ROOM_NOT_FOUND", roomId });
+        peer.close(1008, "Room not found");
         return;
       }
       room = this._createRoom(roomId);
+    }
+
+    // Attach TURN credentials to the peer before addPeer() so Room can
+    // include them in the room:joined message automatically.
+    if (this._turn) {
+      peer._iceServers = [this._turn.generateFor(peer.id)];
     }
 
     const joined = room.addPeer(peer);
@@ -334,7 +440,7 @@ class SignalingServer extends EventEmitter {
      * @param {Peer} peer
      * @param {Room} room
      */
-    this.emit('peer:joined', peer, room);
+    this.emit("peer:joined", peer, room);
   }
 
   // ---------------------------------------------------------------------------
@@ -357,20 +463,20 @@ class SignalingServer extends EventEmitter {
     const { token, roomId } = msg;
 
     if (!token) {
-      return this._handleJoin(tempPeer, { ...msg, type: 'join' });
+      return this._handleJoin(tempPeer, { ...msg, type: "join" });
     }
 
     const existingPeer = this._reconnectTokens.get(token);
 
     if (!existingPeer || existingPeer.state !== Peer.State.RECONNECTING) {
-      tempPeer.send({ type: 'error', code: 'RECONNECT_TOKEN_INVALID' });
-      return this._handleJoin(tempPeer, { ...msg, type: 'join' });
+      tempPeer.send({ type: "error", code: "RECONNECT_TOKEN_INVALID" });
+      return this._handleJoin(tempPeer, { ...msg, type: "join" });
     }
 
     const room = this.rooms.get(existingPeer.roomId || roomId);
     if (!room) {
-      tempPeer.send({ type: 'error', code: 'ROOM_GONE' });
-      return this._handleJoin(tempPeer, { ...msg, type: 'join' });
+      tempPeer.send({ type: "error", code: "ROOM_GONE" });
+      return this._handleJoin(tempPeer, { ...msg, type: "join" });
     }
 
     // Discard the temporary peer that wrapped the new socket.
@@ -388,7 +494,7 @@ class SignalingServer extends EventEmitter {
      * @param {Peer} peer
      * @param {Room} room
      */
-    this.emit('peer:reconnected', existingPeer, room);
+    this.emit("peer:reconnected", existingPeer, room);
   }
 
   // ---------------------------------------------------------------------------
@@ -406,7 +512,7 @@ class SignalingServer extends EventEmitter {
      * @param {Peer} peer
      * @param {Room} room
      */
-    this.emit('peer:left', peer, room);
+    this.emit("peer:left", peer, room);
 
     if (this.autoDestroyRooms && room.isEmpty) {
       this._destroyRoom(room);
@@ -425,15 +531,17 @@ class SignalingServer extends EventEmitter {
   _createRoom(id, { metadata = {} } = {}) {
     const room = new Room({ id, maxPeers: this.maxPeersPerRoom, metadata });
 
-    room.on('peer:left', (peer) => this._onPeerLeft(peer, room));
-    room.on('peer:reconnected', (peer) => this.emit('peer:reconnected', peer, room));
+    room.on("peer:left", (peer) => this._onPeerLeft(peer, room));
+    room.on("peer:reconnected", (peer) =>
+      this.emit("peer:reconnected", peer, room),
+    );
 
     this.rooms.set(id, room);
     /**
      * @event SignalingServer#room:created
      * @param {Room} room
      */
-    this.emit('room:created', room);
+    this.emit("room:created", room);
     console.log(`[webrtc-rooms] Room created: "${id}"`);
     return room;
   }
@@ -448,7 +556,7 @@ class SignalingServer extends EventEmitter {
      * @event SignalingServer#room:destroyed
      * @param {Room} room
      */
-    this.emit('room:destroyed', room);
+    this.emit("room:destroyed", room);
     console.log(`[webrtc-rooms] Room destroyed: "${room.id}"`);
   }
 
@@ -499,11 +607,11 @@ class SignalingServer extends EventEmitter {
    * @example
    * server.kick(peer.id, 'Behaviour policy violation');
    */
-  kick(peerId, reason = 'Kicked by server') {
+  kick(peerId, reason = "Kicked by server") {
     const peer = this.peers.get(peerId);
     if (!peer) return;
 
-    peer.send({ type: 'kicked', reason });
+    peer.send({ type: "kicked", reason });
     peer.close(1008, reason);
 
     if (peer.roomId) {
@@ -540,7 +648,7 @@ class SignalingServer extends EventEmitter {
   close() {
     clearInterval(this._pingTimer);
     for (const peer of this.peers.values()) {
-      peer.close(1001, 'Server shutting down');
+      peer.close(1001, "Server shutting down");
     }
     return new Promise((resolve, reject) => {
       this.wss.close((err) => (err ? reject(err) : resolve()));

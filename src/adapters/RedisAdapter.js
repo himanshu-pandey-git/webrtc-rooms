@@ -1,4 +1,4 @@
-'use strict';
+"use strict";
 
 /**
  * @file RedisAdapter.js
@@ -65,26 +65,26 @@
  * // Signaling messages for remote peers are routed automatically.
  */
 
-const { EventEmitter } = require('events');
+const { EventEmitter } = require("events");
 
 /**
  * Redis channel used for all cross-process signaling messages.
  * @constant {string}
  */
-const BUS_CHANNEL = 'webrtc-rooms:bus';
+const BUS_CHANNEL = "webrtc-rooms:bus";
 
 /**
  * Redis key prefix for the room-membership hashes.
  * Full key pattern: `webrtc-rooms:room:<roomId>`
  * @constant {string}
  */
-const ROOM_KEY_PREFIX = 'webrtc-rooms:room:';
+const ROOM_KEY_PREFIX = "webrtc-rooms:room:";
 
 /**
  * Redis key for the set of all active room IDs across the cluster.
  * @constant {string}
  */
-const ROOMS_INDEX_KEY = 'webrtc-rooms:rooms';
+const ROOMS_INDEX_KEY = "webrtc-rooms:rooms";
 
 /**
  * Process identifier stamped on every published message so a process does not
@@ -128,22 +128,28 @@ class RedisAdapter extends EventEmitter {
     pub,
     sub,
     server,
-    channel    = BUS_CHANNEL,
-    keyPrefix  = ROOM_KEY_PREFIX,
-    peerTtl    = 300,
+    channel = BUS_CHANNEL,
+    keyPrefix = ROOM_KEY_PREFIX,
+    peerTtl = 300,
   }) {
     super();
 
-    if (!pub) throw new Error('[RedisAdapter] options.pub (Redis publish client) is required');
-    if (!sub) throw new Error('[RedisAdapter] options.sub (Redis subscribe client) is required');
-    if (!server) throw new Error('[RedisAdapter] options.server is required');
+    if (!pub)
+      throw new Error(
+        "[RedisAdapter] options.pub (Redis publish client) is required",
+      );
+    if (!sub)
+      throw new Error(
+        "[RedisAdapter] options.sub (Redis subscribe client) is required",
+      );
+    if (!server) throw new Error("[RedisAdapter] options.server is required");
 
-    this._pub      = pub;
-    this._sub      = sub;
-    this._server   = server;
-    this._channel  = channel;
+    this._pub = pub;
+    this._sub = sub;
+    this._server = server;
+    this._channel = channel;
     this._keyPrefix = keyPrefix;
-    this._peerTtl  = peerTtl;
+    this._peerTtl = peerTtl;
     this._processId = PROCESS_ID;
 
     /** @private @type {boolean} */
@@ -166,7 +172,9 @@ class RedisAdapter extends EventEmitter {
     await this._subscribeToChannel();
     this._bindServerEvents();
     this._ready = true;
-    console.log(`[RedisAdapter] Ready (process: ${this._processId}, channel: ${this._channel})`);
+    console.log(
+      `[RedisAdapter] Ready (process: ${this._processId}, channel: ${this._channel})`,
+    );
   }
 
   /**
@@ -197,19 +205,21 @@ class RedisAdapter extends EventEmitter {
   async _subscribeToChannel() {
     // node-redis v4 uses subscribe(channel, handler)
     // ioredis uses subscribe(channel) + on('message', handler)
-    if (typeof this._sub.subscribe === 'function') {
-      if (this._sub.constructor.name === 'Redis') {
+    if (typeof this._sub.subscribe === "function") {
+      if (this._sub.constructor.name === "Redis") {
         // ioredis
         await this._sub.subscribe(this._channel);
-        this._sub.on('message', (_ch, raw) => this._onRedisMessage(raw));
+        this._sub.on("message", (_ch, raw) => this._onRedisMessage(raw));
       } else {
         // node-redis v4
-        await this._sub.subscribe(this._channel, (raw) => this._onRedisMessage(raw));
+        await this._sub.subscribe(this._channel, (raw) =>
+          this._onRedisMessage(raw),
+        );
       }
     } else {
       throw new Error(
-        '[RedisAdapter] The `sub` client does not expose a `subscribe` method. ' +
-        'Ensure you are using ioredis or node-redis v4+.',
+        "[RedisAdapter] The `sub` client does not expose a `subscribe` method. " +
+          "Ensure you are using ioredis or node-redis v4+.",
       );
     }
   }
@@ -218,7 +228,7 @@ class RedisAdapter extends EventEmitter {
    * @private
    */
   async _unsubscribeFromChannel() {
-    if (typeof this._sub.unsubscribe === 'function') {
+    if (typeof this._sub.unsubscribe === "function") {
       await this._sub.unsubscribe(this._channel);
     }
   }
@@ -236,23 +246,29 @@ class RedisAdapter extends EventEmitter {
    * @private
    */
   _bindServerEvents() {
-    this._server.on('peer:joined', (peer, room) => {
+    this._server.on("peer:joined", (peer, room) => {
       this._registerPeer(peer, room.id).catch((err) => {
-        console.error(`[RedisAdapter] Failed to register peer "${peer.id}":`, err.message);
+        console.error(
+          `[RedisAdapter] Failed to register peer "${peer.id}":`,
+          err.message,
+        );
       });
     });
 
-    this._server.on('peer:left', (peer, room) => {
+    this._server.on("peer:left", (peer, room) => {
       // The `room` argument is always provided by SignalingServer._onPeerLeft.
       // We use it directly rather than reading peer.roomId, which may already
       // be null by the time this event fires.
       this._deregisterPeer(peer.id, room.id).catch((err) => {
-        console.error(`[RedisAdapter] Failed to deregister peer "${peer.id}":`, err.message);
+        console.error(
+          `[RedisAdapter] Failed to deregister peer "${peer.id}":`,
+          err.message,
+        );
       });
     });
 
     // Patch every newly created Room to intercept unroutable messages.
-    this._server.on('room:created', (room) => this._patchRoom(room));
+    this._server.on("room:created", (room) => this._patchRoom(room));
 
     // Patch rooms that already exist (if init() is called after rooms were created).
     for (const room of this._server.rooms.values()) {
@@ -286,12 +302,15 @@ class RedisAdapter extends EventEmitter {
 
       // Target is not local — publish to Redis for other processes to handle.
       this._publish({
-        type:     'route',
+        type: "route",
         targetId,
-        roomId:   room.id,
+        roomId: room.id,
         msg,
       }).catch((err) => {
-        console.error(`[RedisAdapter] Failed to publish route to "${targetId}":`, err.message);
+        console.error(
+          `[RedisAdapter] Failed to publish route to "${targetId}":`,
+          err.message,
+        );
       });
     };
   }
@@ -310,7 +329,10 @@ class RedisAdapter extends EventEmitter {
    */
   async _registerPeer(peer, roomId) {
     const roomKey = this._roomKey(roomId);
-    const value   = JSON.stringify({ processId: this._processId, joinedAt: Date.now() });
+    const value = JSON.stringify({
+      processId: this._processId,
+      joinedAt: Date.now(),
+    });
 
     // HSET room-key peerId value
     await this._pub.hSet(roomKey, peer.id, value);
@@ -325,9 +347,9 @@ class RedisAdapter extends EventEmitter {
 
     // Announce to the cluster that a new peer joined.
     await this._publish({
-      type:    'peer:joined',
+      type: "peer:joined",
       roomId,
-      peer:    peer.toJSON(),
+      peer: peer.toJSON(),
     });
   }
 
@@ -349,7 +371,7 @@ class RedisAdapter extends EventEmitter {
       await this._pub.sRem(ROOMS_INDEX_KEY, roomId);
     }
 
-    await this._publish({ type: 'peer:left', roomId, peerId });
+    await this._publish({ type: "peer:left", roomId, peerId });
   }
 
   // ---------------------------------------------------------------------------
@@ -373,7 +395,7 @@ class RedisAdapter extends EventEmitter {
      * @event RedisAdapter#message:published
      * @param {object} payload - The payload that was published.
      */
-    this.emit('message:published', payload);
+    this.emit("message:published", payload);
   }
 
   /**
@@ -387,7 +409,9 @@ class RedisAdapter extends EventEmitter {
     try {
       envelope = JSON.parse(raw);
     } catch {
-      console.warn('[RedisAdapter] Received non-JSON message on Redis channel — ignoring.');
+      console.warn(
+        "[RedisAdapter] Received non-JSON message on Redis channel — ignoring.",
+      );
       return;
     }
 
@@ -398,15 +422,15 @@ class RedisAdapter extends EventEmitter {
      * @event RedisAdapter#message:received
      * @param {object} envelope - The parsed message envelope.
      */
-    this.emit('message:received', envelope);
+    this.emit("message:received", envelope);
 
     switch (envelope.type) {
-      case 'route':
+      case "route":
         this._handleRemoteRoute(envelope);
         break;
 
-      case 'peer:joined':
-      case 'peer:left':
+      case "peer:joined":
+      case "peer:left":
         // These events are informational — they allow a process to maintain
         // an accurate cross-cluster view of room membership if needed.
         // The local server's own events handle local state; remote events
@@ -487,7 +511,7 @@ class RedisAdapter extends EventEmitter {
         const { processId, joinedAt } = JSON.parse(raw);
         return { peerId, processId, joinedAt };
       } catch {
-        return { peerId, processId: 'unknown', joinedAt: 0 };
+        return { peerId, processId: "unknown", joinedAt: 0 };
       }
     });
   }

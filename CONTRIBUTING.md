@@ -95,17 +95,19 @@ To keep `main` stable, all changes must follow these merge rules:
 3. **At least 1 maintainer approval** is required for every PR.
 4. **Self-approval is not allowed** for non-trivial changes.
 5. **Conversation resolution required**: all blocking review comments must be
-  addressed before merge.
+   addressed before merge.
 6. **Up-to-date branch required**: PR branch must be rebased or merged with the
-  latest `main` if requested by maintainers or if CI is outdated.
+   latest `main` if requested by maintainers or if CI is outdated.
 7. **Squash merge only** (default) to keep history readable and atomic.
 8. **Breaking changes** require:
-  - clear `BREAKING CHANGE:` note in PR description,
-  - README/API documentation updates,
-  - Changelog update,
-  - major version bump in the release plan.
+
+- clear `BREAKING CHANGE:` note in PR description,
+- README/API documentation updates,
+- Changelog update,
+- major version bump in the release plan.
+
 9. **Security-sensitive changes** (auth, rate limit, admin API, recording,
-  dependency updates) need explicit maintainer review.
+   dependency updates) need explicit maintainer review.
 
 ---
 

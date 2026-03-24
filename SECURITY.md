@@ -5,7 +5,7 @@ Thank you for helping keep **webrtc-rooms** and its users safe.
 ## Supported Versions
 
 | Version | Supported |
-|---------|-----------|
+| ------- | --------- |
 | 1.x     | YES       |
 | < 1.0   | NO        |
 

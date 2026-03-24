@@ -1,4 +1,4 @@
-'use strict';
+"use strict";
 
 /**
  * @file RecordingAdapter.js
@@ -17,10 +17,10 @@
  * @module webrtc-rooms/adapters/RecordingAdapter
  */
 
-const { EventEmitter } = require('events');
-const { spawn } = require('child_process');
-const path = require('path');
-const fs = require('fs');
+const { EventEmitter } = require("events");
+const { spawn } = require("child_process");
+const path = require("path");
+const fs = require("fs");
 
 /**
  * Milliseconds to wait for ffmpeg to flush its output buffers and exit cleanly
@@ -76,14 +76,15 @@ class RecordingAdapter extends EventEmitter {
    */
   constructor({
     outputDir,
-    format = 'webm',
+    format = "webm",
     videoKbps = 800,
     audioKbps = 128,
     ffmpegArgs = {},
   } = {}) {
     super();
 
-    if (!outputDir) throw new Error('[RecordingAdapter] options.outputDir is required');
+    if (!outputDir)
+      throw new Error("[RecordingAdapter] options.outputDir is required");
 
     this.outputDir = outputDir;
     this.format = format;
@@ -132,18 +133,24 @@ class RecordingAdapter extends EventEmitter {
   attach(server) {
     this._server = server;
 
-    server.on('peer:joined', (peer, room) => {
+    server.on("peer:joined", (peer, room) => {
       if (this._roomRecordings.has(room.id)) {
         this.startPeer(peer.id, room.id).catch((err) => {
-          console.error(`[RecordingAdapter] Auto-start failed for peer "${peer.id}":`, err.message);
+          console.error(
+            `[RecordingAdapter] Auto-start failed for peer "${peer.id}":`,
+            err.message,
+          );
         });
       }
     });
 
-    server.on('peer:left', (peer) => {
+    server.on("peer:left", (peer) => {
       if (this._recordings.has(peer.id)) {
         this.stopPeer(peer.id).catch((err) => {
-          console.error(`[RecordingAdapter] Auto-stop failed for peer "${peer.id}":`, err.message);
+          console.error(
+            `[RecordingAdapter] Auto-stop failed for peer "${peer.id}":`,
+            err.message,
+          );
         });
       }
     });
@@ -171,53 +178,67 @@ class RecordingAdapter extends EventEmitter {
    *
    * @fires RecordingAdapter#recording:started
    */
-  async startPeer(peerId, roomId = 'default') {
+  async startPeer(peerId, roomId = "default") {
     if (this._recordings.has(peerId)) {
-      throw new Error(`[RecordingAdapter] Peer "${peerId}" is already being recorded`);
+      throw new Error(
+        `[RecordingAdapter] Peer "${peerId}" is already being recorded`,
+      );
     }
 
     const dir = path.join(this.outputDir, roomId);
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const extension = this.format === 'mp4' ? 'mp4' : 'webm';
-    const filePath = path.join(dir, `${peerId.slice(0, 8)}-${timestamp}.${extension}`);
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const extension = this.format === "mp4" ? "mp4" : "webm";
+    const filePath = path.join(
+      dir,
+      `${peerId.slice(0, 8)}-${timestamp}.${extension}`,
+    );
 
     fs.mkdirSync(dir, { recursive: true });
 
     const ffmpegCommand = this._buildFfmpegArgs(filePath);
-    const proc = spawn('ffmpeg', ffmpegCommand, { stdio: ['pipe', 'pipe', 'pipe'] });
+    const proc = spawn("ffmpeg", ffmpegCommand, {
+      stdio: ["pipe", "pipe", "pipe"],
+    });
 
-    proc.stderr.on('data', (chunk) => {
+    proc.stderr.on("data", (chunk) => {
       const line = chunk.toString();
-      if (line.includes('time=') || line.toLowerCase().includes('error')) {
+      if (line.includes("time=") || line.toLowerCase().includes("error")) {
         /**
          * @event RecordingAdapter#recording:progress
          * @param {{ peerId: string, roomId: string, line: string }}
          */
-        this.emit('recording:progress', { peerId, roomId, line: line.trim() });
+        this.emit("recording:progress", { peerId, roomId, line: line.trim() });
       }
     });
 
-    proc.on('error', (err) => {
-      if (err.code === 'ENOENT') {
+    proc.on("error", (err) => {
+      if (err.code === "ENOENT") {
         console.error(
-          '[RecordingAdapter] ffmpeg was not found. Install ffmpeg and ensure it is on PATH.',
+          "[RecordingAdapter] ffmpeg was not found. Install ffmpeg and ensure it is on PATH.",
         );
       }
       /**
        * @event RecordingAdapter#recording:error
        * @param {{ peerId: string, roomId: string, error: Error }}
        */
-      this.emit('recording:error', { peerId, roomId, error: err });
+      this.emit("recording:error", { peerId, roomId, error: err });
     });
 
-    this._recordings.set(peerId, { process: proc, filePath, startedAt: Date.now(), roomId });
+    this._recordings.set(peerId, {
+      process: proc,
+      filePath,
+      startedAt: Date.now(),
+      roomId,
+    });
 
     /**
      * @event RecordingAdapter#recording:started
      * @param {{ peerId: string, roomId: string, path: string }}
      */
-    this.emit('recording:started', { peerId, roomId, path: filePath });
-    console.log(`[RecordingAdapter] Recording started: peer "${peerId.slice(0, 8)}" → ${filePath}`);
+    this.emit("recording:started", { peerId, roomId, path: filePath });
+    console.log(
+      `[RecordingAdapter] Recording started: peer "${peerId.slice(0, 8)}" → ${filePath}`,
+    );
 
     return { path: filePath };
   }
@@ -241,7 +262,11 @@ class RecordingAdapter extends EventEmitter {
     return new Promise((resolve, reject) => {
       const record = this._recordings.get(peerId);
       if (!record) {
-        return reject(new Error(`[RecordingAdapter] Peer "${peerId}" is not being recorded`));
+        return reject(
+          new Error(
+            `[RecordingAdapter] Peer "${peerId}" is not being recorded`,
+          ),
+        );
       }
 
       const { process: proc, filePath, startedAt, roomId } = record;
@@ -251,10 +276,10 @@ class RecordingAdapter extends EventEmitter {
       proc.stdin.end();
 
       const forceKillTimer = setTimeout(() => {
-        if (!proc.killed) proc.kill('SIGKILL');
+        if (!proc.killed) proc.kill("SIGKILL");
       }, FFMPEG_FLUSH_TIMEOUT_MS);
 
-      proc.on('close', (code) => {
+      proc.on("close", (code) => {
         clearTimeout(forceKillTimer);
         this._recordings.delete(peerId);
 
@@ -271,14 +296,14 @@ class RecordingAdapter extends EventEmitter {
            * @event RecordingAdapter#recording:stopped
            * @param {{ peerId: string, roomId: string, path: string, durationMs: number }}
            */
-          this.emit('recording:stopped', { peerId, roomId, ...result });
+          this.emit("recording:stopped", { peerId, roomId, ...result });
           console.log(
             `[RecordingAdapter] Recording stopped: peer "${peerId.slice(0, 8)}" (${(durationMs / 1000).toFixed(1)}s)`,
           );
           resolve(result);
         } else {
           const err = new Error(`ffmpeg exited with code ${code}`);
-          this.emit('recording:error', { peerId, roomId, error: err });
+          this.emit("recording:error", { peerId, roomId, error: err });
           reject(err);
         }
       });
@@ -304,7 +329,9 @@ class RecordingAdapter extends EventEmitter {
    */
   async startRoom(roomId) {
     if (!this._server) {
-      throw new Error('[RecordingAdapter] Call .attach(server) before startRoom()');
+      throw new Error(
+        "[RecordingAdapter] Call .attach(server) before startRoom()",
+      );
     }
 
     const room = this._server.getRoom(roomId);
@@ -323,7 +350,7 @@ class RecordingAdapter extends EventEmitter {
      * @event RecordingAdapter#recording:room:started
      * @param {{ roomId: string, peers: string[] }}
      */
-    this.emit('recording:room:started', { roomId, peers: started });
+    this.emit("recording:room:started", { roomId, peers: started });
     return { started };
   }
 
@@ -360,7 +387,7 @@ class RecordingAdapter extends EventEmitter {
      * @event RecordingAdapter#recording:room:stopped
      * @param {{ roomId: string, files: Array<{ path: string, durationMs: number }> }}
      */
-    this.emit('recording:room:stopped', { roomId, files: results });
+    this.emit("recording:room:stopped", { roomId, files: results });
     return results;
   }
 
@@ -402,20 +429,38 @@ class RecordingAdapter extends EventEmitter {
     // Synthetic inputs for signaling-only or development deployments.
     // In a wrtc integration these would be replaced with RTP demuxer inputs.
     const inputs = [
-      '-y',
-      '-f', 'lavfi', '-i', 'testsrc=size=640x480:rate=30',
-      '-f', 'lavfi', '-i', 'sine=frequency=440',
+      "-y",
+      "-f",
+      "lavfi",
+      "-i",
+      "testsrc=size=640x480:rate=30",
+      "-f",
+      "lavfi",
+      "-i",
+      "sine=frequency=440",
     ];
 
-    const videoCodec = this.format === 'mp4'
-      ? ['-c:v', 'libx264', '-preset', 'ultrafast', '-b:v', `${this.videoKbps}k`]
-      : ['-c:v', 'libvpx', '-b:v', `${this.videoKbps}k`];
+    const videoCodec =
+      this.format === "mp4"
+        ? [
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-b:v",
+            `${this.videoKbps}k`,
+          ]
+        : ["-c:v", "libvpx", "-b:v", `${this.videoKbps}k`];
 
-    const audioCodec = this.format === 'mp4'
-      ? ['-c:a', 'aac', '-b:a', `${this.audioKbps}k`]
-      : ['-c:a', 'libopus', '-b:a', `${this.audioKbps}k`];
+    const audioCodec =
+      this.format === "mp4"
+        ? ["-c:a", "aac", "-b:a", `${this.audioKbps}k`]
+        : ["-c:a", "libopus", "-b:a", `${this.audioKbps}k`];
 
-    const overrides = Object.entries(this.ffmpegArgs).flatMap(([k, v]) => [k, String(v)]);
+    const overrides = Object.entries(this.ffmpegArgs).flatMap(([k, v]) => [
+      k,
+      String(v),
+    ]);
 
     return [...inputs, ...videoCodec, ...audioCodec, ...overrides, outputPath];
   }
