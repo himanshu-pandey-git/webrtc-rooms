@@ -30,6 +30,15 @@
 - [ ] Review comments are addressed
 - [ ] I confirm this PR follows [CONTRIBUTING.md](../CONTRIBUTING.md)
 
+## Release checklist (required for release PRs)
+
+- [ ] `package.json` version is correct for this release
+- [ ] `CHANGELOG.md` is updated
+- [ ] I ran `npm test`
+- [ ] I ran `npm run typecheck`
+- [ ] I ran `npm pack --dry-run`
+- [ ] README/API changes are documented (if applicable)
+
 ## Breaking change details (required if applicable)
 
 <!-- Describe impact, migration path, and compatibility notes. -->
