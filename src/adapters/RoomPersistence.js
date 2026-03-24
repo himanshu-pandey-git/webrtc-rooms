@@ -1,4 +1,4 @@
-'use strict';
+"use strict";
 
 /**
  * @file RoomPersistence.js
@@ -50,21 +50,21 @@
  * server.on('listening', () => console.log('Ready'));
  */
 
-const { EventEmitter } = require('events');
+const { EventEmitter } = require("events");
 
 /**
  * Redis key prefix for individual room snapshots.
  * Full key pattern: `webrtc-rooms:snapshot:<roomId>`
  * @constant {string}
  */
-const SNAPSHOT_KEY_PREFIX = 'webrtc-rooms:snapshot:';
+const SNAPSHOT_KEY_PREFIX = "webrtc-rooms:snapshot:";
 
 /**
  * Redis Set key that indexes all persisted room IDs.
  * Used by `restore()` to find all snapshots without a full key scan.
  * @constant {string}
  */
-const SNAPSHOT_INDEX_KEY = 'webrtc-rooms:snapshot-index';
+const SNAPSHOT_INDEX_KEY = "webrtc-rooms:snapshot-index";
 
 /**
  * Symbol used to tag rooms whose `setMetadata` has already been patched.
@@ -73,7 +73,7 @@ const SNAPSHOT_INDEX_KEY = 'webrtc-rooms:snapshot-index';
  *
  * @private
  */
-const PATCH_APPLIED = Symbol('webrtc-rooms:persistence:patched');
+const PATCH_APPLIED = Symbol("webrtc-rooms:persistence:patched");
 
 /**
  * Persists room state to Redis and restores it after a server restart.
@@ -104,19 +104,20 @@ class RoomPersistence extends EventEmitter {
   constructor({
     redis,
     server,
-    keyPrefix   = SNAPSHOT_KEY_PREFIX,
-    indexKey    = SNAPSHOT_INDEX_KEY,
+    keyPrefix = SNAPSHOT_KEY_PREFIX,
+    indexKey = SNAPSHOT_INDEX_KEY,
     snapshotTtl = 0,
   }) {
     super();
 
-    if (!redis)  throw new Error('[RoomPersistence] options.redis is required');
-    if (!server) throw new Error('[RoomPersistence] options.server is required');
+    if (!redis) throw new Error("[RoomPersistence] options.redis is required");
+    if (!server)
+      throw new Error("[RoomPersistence] options.server is required");
 
-    this._redis       = redis;
-    this._server      = server;
-    this._keyPrefix   = keyPrefix;
-    this._indexKey    = indexKey;
+    this._redis = redis;
+    this._server = server;
+    this._keyPrefix = keyPrefix;
+    this._indexKey = indexKey;
     this._snapshotTtl = snapshotTtl;
 
     /** @private @type {boolean} */
@@ -149,7 +150,7 @@ class RoomPersistence extends EventEmitter {
   async restore() {
     const roomIds = await this._getSnapshotIndex();
     const restored = [];
-    const skipped  = [];
+    const skipped = [];
 
     for (const roomId of roomIds) {
       const snapshot = await this._loadSnapshot(roomId);
@@ -182,7 +183,7 @@ class RoomPersistence extends EventEmitter {
      * @event RoomPersistence#restore:complete
      * @param {{ restored: string[], skipped: string[] }}
      */
-    this.emit('restore:complete', { restored, skipped });
+    this.emit("restore:complete", { restored, skipped });
 
     console.log(
       `[RoomPersistence] Restore complete — ${restored.length} restored, ${skipped.length} skipped`,
@@ -207,17 +208,23 @@ class RoomPersistence extends EventEmitter {
     if (this._attached) return this;
     this._attached = true;
 
-    this._server.on('room:created', (room) => {
+    this._server.on("room:created", (room) => {
       this._persistRoom(room).catch((err) => {
-        console.error(`[RoomPersistence] Failed to persist room "${room.id}":`, err.message);
+        console.error(
+          `[RoomPersistence] Failed to persist room "${room.id}":`,
+          err.message,
+        );
       });
       // Patch setMetadata so every metadata change is saved immediately.
       this._patchRoomMetadata(room);
     });
 
-    this._server.on('room:destroyed', (room) => {
+    this._server.on("room:destroyed", (room) => {
       this._deleteSnapshot(room.id).catch((err) => {
-        console.error(`[RoomPersistence] Failed to delete snapshot for "${room.id}":`, err.message);
+        console.error(
+          `[RoomPersistence] Failed to delete snapshot for "${room.id}":`,
+          err.message,
+        );
       });
     });
 
@@ -292,10 +299,10 @@ class RoomPersistence extends EventEmitter {
     const key = this._snapshotKey(room.id);
 
     const fields = {
-      metadata:  JSON.stringify(room.metadata),
-      maxPeers:  String(room.maxPeers),
+      metadata: JSON.stringify(room.metadata),
+      maxPeers: String(room.maxPeers),
       createdAt: String(room.createdAt),
-      savedAt:   String(Date.now()),
+      savedAt: String(Date.now()),
     };
 
     // hSet accepts an object of field→value pairs in node-redis v4 and ioredis.
@@ -312,7 +319,7 @@ class RoomPersistence extends EventEmitter {
      * @event RoomPersistence#room:saved
      * @param {{ roomId: string, key: string }}
      */
-    this.emit('room:saved', { roomId: room.id, key });
+    this.emit("room:saved", { roomId: room.id, key });
   }
 
   /**
@@ -323,7 +330,7 @@ class RoomPersistence extends EventEmitter {
    * @returns {Promise<{ metadata: object, maxPeers: number, createdAt: number, savedAt: number }|null>}
    */
   async _loadSnapshot(roomId) {
-    const key  = this._snapshotKey(roomId);
+    const key = this._snapshotKey(roomId);
     const hash = await this._redis.hGetAll(key);
 
     // hGetAll returns null (ioredis) or {} (node-redis) when the key is absent.
@@ -331,16 +338,16 @@ class RoomPersistence extends EventEmitter {
 
     let metadata = {};
     try {
-      metadata = JSON.parse(hash.metadata ?? '{}');
+      metadata = JSON.parse(hash.metadata ?? "{}");
     } catch {
       // Corrupt metadata field — restore with empty object.
     }
 
     return {
       metadata,
-      maxPeers:  parseInt(hash.maxPeers ?? '50', 10),
-      createdAt: parseInt(hash.createdAt ?? '0', 10),
-      savedAt:   parseInt(hash.savedAt   ?? '0', 10),
+      maxPeers: parseInt(hash.maxPeers ?? "50", 10),
+      createdAt: parseInt(hash.createdAt ?? "0", 10),
+      savedAt: parseInt(hash.savedAt ?? "0", 10),
     };
   }
 
@@ -359,7 +366,7 @@ class RoomPersistence extends EventEmitter {
      * @event RoomPersistence#room:deleted
      * @param {{ roomId: string }}
      */
-    this.emit('room:deleted', { roomId });
+    this.emit("room:deleted", { roomId });
   }
 
   /**

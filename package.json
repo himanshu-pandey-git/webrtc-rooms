@@ -1,7 +1,7 @@
 {
   "name": "webrtc-rooms",
-  "version": "1.1.1",
-  "description": "WebRTC signaling, room management, SFU, recording, and admin API for Node.js",
+  "version": "2.0.0",
+  "description": "The WebRTC infrastructure layer for Node.js. Ships everything a production video/audio platform needs as a single coherent system: a native zero-dependency SFU with simulcast and adaptive bitrate, multi-region orchestration with automatic failover, HMAC-signed session persistence, Redis pub/sub scaling, end-to-end encryption key exchange, per-subscriber quality scoring, SOC2/HIPAA-ready audit logging, GDPR consent and data residency enforcement, distributed tracing, Prometheus metrics, SLO health monitoring, threat detection with graduated response, backpressure-aware load shedding, idempotent event replay for reconnecting peers, structured moderation with capability enforcement, signed webhook delivery, TURN credential generation, and a CLI that scaffolds a production-ready server in under a minute.",
   "type": "commonjs",
   "main": "src/index.js",
   "exports": {
@@ -12,8 +12,17 @@
     }
   },
   "types": "src/index.d.ts",
+  "bin": {
+    "webrtc-rooms": "./cli/index.js"
+  },
   "scripts": {
-    "test": "node tests/index.test.js && node tests/redis-persistence-e2e.test.js",
+    "test": "node tests/index.test.js && node tests/redis-persistence-e2e.test.js && node tests/features.test.js && node tests/test1.test.js && node tests/test2.test.js && node tests/test3.test.js",
+    "test:core": "node tests/index.test.js",
+    "test:redis": "node tests/redis-persistence-e2e.test.js",
+    "test:test1": "node tests/test1.test.js",
+    "test:test2": "node tests/test2.test.js",
+    "test:test3": "node tests/test3.test.js",
+    "test:all": "npm test",
     "typecheck": "tsc --noEmit",
     "example": "node examples/basic-server.js",
     "example:advanced": "node examples/advanced-server.js",
@@ -25,7 +34,6 @@
     "signaling",
     "rooms",
     "sfu",
-    "mediasoup",
     "video",
     "audio",
     "peer-to-peer",
@@ -34,7 +42,13 @@
     "websocket",
     "redis",
     "e2e-encryption",
-    "room-persistence"
+    "room-persistence",
+    "observability",
+    "metrics",
+    "compliance",
+    "adaptive-bitrate",
+    "multi-region",
+    "enterprise"
   ],
   "author": {
     "name": "Himanshu Pandey",
@@ -71,6 +85,7 @@
   },
   "files": [
     "src/",
+    "cli/",
     "examples/",
     "README.md",
     "CONTRIBUTING.md",

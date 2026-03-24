@@ -1,4 +1,4 @@
-'use strict';
+"use strict";
 
 /**
  * @file RateLimiter.js
@@ -8,7 +8,7 @@
  * @module webrtc-rooms/middleware/RateLimiter
  */
 
-const { EventEmitter } = require('events');
+const { EventEmitter } = require("events");
 
 /**
  * Protects the signaling server from flooding and abuse with two independent
@@ -120,7 +120,7 @@ class RateLimiter extends EventEmitter {
    */
   attach(server) {
     // Intercept connections before they reach the server's own handler.
-    server.wss.on('connection', (socket, req) => {
+    server.wss.on("connection", (socket, req) => {
       const ip = this._extractIp(req);
 
       if (!this._allowConnection(ip)) {
@@ -128,17 +128,17 @@ class RateLimiter extends EventEmitter {
          * @event RateLimiter#connection:blocked
          * @param {{ ip: string }}
          */
-        this.emit('connection:blocked', { ip });
-        socket.close(1008, 'Rate limited');
+        this.emit("connection:blocked", { ip });
+        socket.close(1008, "Rate limited");
       }
     });
 
     // Decorate each new Peer to intercept its emitted 'signal' events.
-    server.on('peer:connected', (peer) => {
+    server.on("peer:connected", (peer) => {
       const originalEmit = peer.emit.bind(peer);
 
       peer.emit = (event, ...args) => {
-        if (event === 'signal') {
+        if (event === "signal") {
           const ip = this._extractPeerIp(peer);
 
           if (!this._allowSignal(peer.id, ip)) {
@@ -146,8 +146,12 @@ class RateLimiter extends EventEmitter {
              * @event RateLimiter#signal:blocked
              * @param {{ peerId: string }}
              */
-            this.emit('signal:blocked', { peerId: peer.id });
-            peer.send({ type: 'error', code: 'RATE_LIMITED', message: 'Too many messages. Slow down.' });
+            this.emit("signal:blocked", { peerId: peer.id });
+            peer.send({
+              type: "error",
+              code: "RATE_LIMITED",
+              message: "Too many messages. Slow down.",
+            });
             return false;
           }
         }
@@ -195,8 +199,10 @@ class RateLimiter extends EventEmitter {
        * @event RateLimiter#ip:banned
        * @param {{ ip: string, until: number }}
        */
-      this.emit('ip:banned', { ip, until });
-      console.warn(`[RateLimiter] IP ${ip} banned for ${this.banDurationMs / 1000}s (too many connections)`);
+      this.emit("ip:banned", { ip, until });
+      console.warn(
+        `[RateLimiter] IP ${ip} banned for ${this.banDurationMs / 1000}s (too many connections)`,
+      );
       return false;
     }
 
@@ -218,8 +224,14 @@ class RateLimiter extends EventEmitter {
       w = { secCount: 0, secStart: now, minCount: 0, minStart: now };
     }
 
-    if (now - w.secStart > 1_000) { w.secCount = 0; w.secStart = now; }
-    if (now - w.minStart > 60_000) { w.minCount = 0; w.minStart = now; }
+    if (now - w.secStart > 1_000) {
+      w.secCount = 0;
+      w.secStart = now;
+    }
+    if (now - w.minStart > 60_000) {
+      w.minCount = 0;
+      w.minStart = now;
+    }
 
     w.secCount++;
     w.minCount++;
@@ -242,7 +254,7 @@ class RateLimiter extends EventEmitter {
   ban(ip, durationMs = this.banDurationMs) {
     const until = Date.now() + durationMs;
     this._banned.set(ip, until);
-    this.emit('ip:banned', { ip, until });
+    this.emit("ip:banned", { ip, until });
   }
 
   /**
@@ -292,9 +304,9 @@ class RateLimiter extends EventEmitter {
    */
   _extractIp(req) {
     return (
-      req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+      req.headers["x-forwarded-for"]?.split(",")[0]?.trim() ||
       req.socket?.remoteAddress ||
-      'unknown'
+      "unknown"
     );
   }
 
@@ -307,9 +319,9 @@ class RateLimiter extends EventEmitter {
    */
   _extractPeerIp(peer) {
     try {
-      return peer.socket._socket?.remoteAddress ?? 'unknown';
+      return peer.socket._socket?.remoteAddress ?? "unknown";
     } catch {
-      return 'unknown';
+      return "unknown";
     }
   }
 

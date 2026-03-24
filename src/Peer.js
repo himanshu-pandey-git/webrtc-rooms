@@ -1,4 +1,4 @@
-'use strict';
+"use strict";
 
 /**
  * @file Peer.js
@@ -11,8 +11,8 @@
  * @module webrtc-rooms/Peer
  */
 
-const { EventEmitter } = require('events');
-const { v4: uuidv4 } = require('uuid');
+const { EventEmitter } = require("events");
+const { v4: uuidv4 } = require("uuid");
 
 /**
  * All possible states a peer can be in throughout its lifecycle.
@@ -22,19 +22,19 @@ const { v4: uuidv4 } = require('uuid');
  */
 const PeerState = Object.freeze({
   /** WebSocket is open but the peer has not yet joined a room. */
-  CONNECTING: 'connecting',
+  CONNECTING: "connecting",
 
   /** Peer is inside a room and fully active. */
-  JOINED: 'joined',
+  JOINED: "joined",
 
   /**
    * The peer's socket dropped, but the reconnect grace period is still active.
    * Messages sent during this window are queued and flushed on reconnect.
    */
-  RECONNECTING: 'reconnecting',
+  RECONNECTING: "reconnecting",
 
   /** Peer has permanently disconnected or been kicked. */
-  CLOSED: 'closed',
+  CLOSED: "closed",
 });
 
 /**
@@ -160,7 +160,7 @@ class Peer extends EventEmitter {
    * @private
    */
   _bindSocketEvents() {
-    this.socket.on('message', (raw) => {
+    this.socket.on("message", (raw) => {
       let msg;
       try {
         msg = JSON.parse(raw);
@@ -174,10 +174,10 @@ class Peer extends EventEmitter {
        * @event Peer#signal
        * @type {object} msg - Parsed JSON message from the peer.
        */
-      this.emit('signal', msg);
+      this.emit("signal", msg);
     });
 
-    this.socket.on('close', () => {
+    this.socket.on("close", () => {
       if (this.state === PeerState.CLOSED) return;
 
       if (this.reconnectToken && this._reconnectTtl > 0) {
@@ -194,17 +194,17 @@ class Peer extends EventEmitter {
            *
            * @event Peer#disconnect
            */
-          this.emit('disconnect');
+          this.emit("disconnect");
         }, this._reconnectTtl);
       } else {
         this.state = PeerState.CLOSED;
-        this.emit('disconnect');
+        this.emit("disconnect");
       }
     });
 
-    this.socket.on('error', (err) => {
+    this.socket.on("error", (err) => {
       // Surface the error and let the close handler manage state transitions.
-      this.emit('error', err);
+      this.emit("error", err);
       this.socket.terminate?.();
     });
   }
@@ -238,7 +238,7 @@ class Peer extends EventEmitter {
     try {
       this.socket.send(JSON.stringify(msg));
     } catch (err) {
-      this.emit('error', err);
+      this.emit("error", err);
     }
   }
 
@@ -272,7 +272,7 @@ class Peer extends EventEmitter {
      *
      * @event Peer#reconnected
      */
-    this.emit('reconnected');
+    this.emit("reconnected");
   }
 
   /**
@@ -309,7 +309,7 @@ class Peer extends EventEmitter {
    * @param {string} [reason='']  - Optional human-readable close reason.
    * @returns {void}
    */
-  close(code = 1000, reason = '') {
+  close(code = 1000, reason = "") {
     clearTimeout(this._reconnectTimer);
     this._reconnectTimer = null;
     this.reconnectToken = null;

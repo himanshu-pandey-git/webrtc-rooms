@@ -1,4 +1,4 @@
-'use strict';
+"use strict";
 
 /**
  * @file MediasoupAdapter.js
@@ -30,14 +30,14 @@
  * @module webrtc-rooms/adapters/MediasoupAdapter
  */
 
-const { EventEmitter } = require('events');
-const os = require('os');
+const { EventEmitter } = require("events");
+const os = require("os");
 
 // mediasoup is an optional peer dependency — import lazily so the rest of the
 // library continues to work in signaling-only deployments.
 let mediasoup = null;
 try {
-  mediasoup = require('mediasoup');
+  mediasoup = require("mediasoup");
 } catch {
   // Will throw a descriptive error in init() if the adapter is actually used.
 }
@@ -51,32 +51,32 @@ try {
  */
 const MEDIA_CODECS = [
   {
-    kind: 'audio',
-    mimeType: 'audio/opus',
+    kind: "audio",
+    mimeType: "audio/opus",
     clockRate: 48000,
     channels: 2,
   },
   {
-    kind: 'video',
-    mimeType: 'video/VP8',
+    kind: "video",
+    mimeType: "video/VP8",
     clockRate: 90000,
-    parameters: { 'x-google-start-bitrate': 1000 },
+    parameters: { "x-google-start-bitrate": 1000 },
   },
   {
-    kind: 'video',
-    mimeType: 'video/VP9',
+    kind: "video",
+    mimeType: "video/VP9",
     clockRate: 90000,
-    parameters: { 'profile-id': 2, 'x-google-start-bitrate': 1000 },
+    parameters: { "profile-id": 2, "x-google-start-bitrate": 1000 },
   },
   {
-    kind: 'video',
-    mimeType: 'video/h264',
+    kind: "video",
+    mimeType: "video/h264",
     clockRate: 90000,
     parameters: {
-      'packetization-mode': 1,
-      'profile-level-id': '4d0032',
-      'level-asymmetry-allowed': 1,
-      'x-google-start-bitrate': 1000,
+      "packetization-mode": 1,
+      "profile-level-id": "4d0032",
+      "level-asymmetry-allowed": 1,
+      "x-google-start-bitrate": 1000,
     },
   },
 ];
@@ -120,7 +120,7 @@ class MediasoupAdapter extends EventEmitter {
    *   Defaults to the number of logical CPU cores.
    */
   constructor({
-    listenIp = '127.0.0.1',
+    listenIp = "127.0.0.1",
     announcedIp = null,
     rtcMinPort = 10000,
     rtcMaxPort = 10100,
@@ -172,7 +172,7 @@ class MediasoupAdapter extends EventEmitter {
   async init() {
     if (!mediasoup) {
       throw new Error(
-        '[MediasoupAdapter] mediasoup v3 is required. Install it: npm install mediasoup',
+        "[MediasoupAdapter] mediasoup v3 is required. Install it: npm install mediasoup",
       );
     }
 
@@ -180,17 +180,20 @@ class MediasoupAdapter extends EventEmitter {
       const worker = await mediasoup.createWorker({
         rtcMinPort: this.rtcMinPort,
         rtcMaxPort: this.rtcMaxPort,
-        logLevel: 'warn',
+        logLevel: "warn",
       });
 
-      worker.on('died', (err) => {
-        console.error(`[MediasoupAdapter] Worker PID ${worker.pid} died:`, err?.message);
+      worker.on("died", (err) => {
+        console.error(
+          `[MediasoupAdapter] Worker PID ${worker.pid} died:`,
+          err?.message,
+        );
         this._workers = this._workers.filter((w) => w !== worker);
         /**
          * @event MediasoupAdapter#worker:died
          * @param {import('mediasoup').types.Worker} worker
          */
-        this.emit('worker:died', worker);
+        this.emit("worker:died", worker);
       });
 
       this._workers.push(worker);
@@ -230,36 +233,45 @@ class MediasoupAdapter extends EventEmitter {
   attach(server) {
     this._server = server;
 
-    server.on('room:created', async (room) => {
+    server.on("room:created", async (room) => {
       try {
         await this._setupRoom(room.id);
       } catch (err) {
-        console.error(`[MediasoupAdapter] Failed to set up room "${room.id}":`, err.message);
+        console.error(
+          `[MediasoupAdapter] Failed to set up room "${room.id}":`,
+          err.message,
+        );
       }
     });
 
-    server.on('room:destroyed', (room) => {
+    server.on("room:destroyed", (room) => {
       this._teardownRoom(room.id);
     });
 
-    server.on('peer:joined', async (peer, room) => {
+    server.on("peer:joined", async (peer, room) => {
       try {
         await this._setupPeer(peer, room);
       } catch (err) {
-        console.error(`[MediasoupAdapter] Failed to set up peer "${peer.id}":`, err.message);
+        console.error(
+          `[MediasoupAdapter] Failed to set up peer "${peer.id}":`,
+          err.message,
+        );
       }
     });
 
-    server.on('peer:left', (peer) => {
+    server.on("peer:left", (peer) => {
       this._teardownPeer(peer.id);
     });
 
     // Listen for SFU-specific signals forwarded through the data relay.
     server.rooms.forEach((room) => {
-      room.on('data', (fromPeer, _to, payload) => {
+      room.on("data", (fromPeer, _to, payload) => {
         if (payload?.__sfu) {
           this._handleSfuSignal(fromPeer, payload).catch((err) => {
-            console.error(`[MediasoupAdapter] SFU signal error for peer "${fromPeer.id}":`, err.message);
+            console.error(
+              `[MediasoupAdapter] SFU signal error for peer "${fromPeer.id}":`,
+              err.message,
+            );
           });
         }
       });
@@ -291,7 +303,9 @@ class MediasoupAdapter extends EventEmitter {
       consumers: new Map(),
     });
 
-    console.log(`[MediasoupAdapter] Router created for room "${roomId}" (worker ${worker.pid})`);
+    console.log(
+      `[MediasoupAdapter] Router created for room "${roomId}" (worker ${worker.pid})`,
+    );
   }
 
   /**
@@ -328,7 +342,7 @@ class MediasoupAdapter extends EventEmitter {
     }
 
     const listenInfo = {
-      protocol: 'udp',
+      protocol: "udp",
       ip: this.listenIp,
       ...(this.announcedIp ? { announcedIp: this.announcedIp } : {}),
     };
@@ -351,7 +365,7 @@ class MediasoupAdapter extends EventEmitter {
     // Send the router's RTP capabilities and both transport parameter objects
     // to the browser so mediasoup-client can connect.
     peer.send({
-      type: 'sfu:transport:created',
+      type: "sfu:transport:created",
       routerRtpCapabilities: ctx.router.rtpCapabilities,
       sendTransport: this._serializeTransport(sendTransport),
       recvTransport: this._serializeTransport(recvTransport),
@@ -407,17 +421,20 @@ class MediasoupAdapter extends EventEmitter {
     if (!ctx) return;
 
     switch (payload.__sfu) {
-
-      case 'transport:connect': {
+      case "transport:connect": {
         const transports = ctx.transports.get(peer.id);
         if (!transports) return;
-        const transport = payload.direction === 'send' ? transports.send : transports.recv;
+        const transport =
+          payload.direction === "send" ? transports.send : transports.recv;
         await transport.connect({ dtlsParameters: payload.dtlsParameters });
-        peer.send({ type: 'sfu:transport:connected', direction: payload.direction });
+        peer.send({
+          type: "sfu:transport:connected",
+          direction: payload.direction,
+        });
         break;
       }
 
-      case 'produce': {
+      case "produce": {
         const transports = ctx.transports.get(peer.id);
         if (!transports) return;
 
@@ -427,12 +444,12 @@ class MediasoupAdapter extends EventEmitter {
         });
 
         ctx.producers.set(producer.id, producer);
-        peer.send({ type: 'sfu:produced', producerId: producer.id });
+        peer.send({ type: "sfu:produced", producerId: producer.id });
 
         // Notify everyone else about the new producer so they can subscribe.
         room.broadcast(
           {
-            type: 'sfu:new-producer',
+            type: "sfu:new-producer",
             peerId: peer.id,
             producerId: producer.id,
             kind: payload.kind,
@@ -442,18 +459,24 @@ class MediasoupAdapter extends EventEmitter {
         break;
       }
 
-      case 'consume': {
+      case "consume": {
         const producer = ctx.producers.get(payload.producerId);
         if (!producer) return;
 
         const transports = ctx.transports.get(peer.id);
         if (!transports) return;
 
-        if (!ctx.router.canConsume({
-          producerId: producer.id,
-          rtpCapabilities: payload.rtpCapabilities,
-        })) {
-          peer.send({ type: 'error', code: 'SFU_CANNOT_CONSUME', producerId: producer.id });
+        if (
+          !ctx.router.canConsume({
+            producerId: producer.id,
+            rtpCapabilities: payload.rtpCapabilities,
+          })
+        ) {
+          peer.send({
+            type: "error",
+            code: "SFU_CANNOT_CONSUME",
+            producerId: producer.id,
+          });
           return;
         }
 
@@ -466,7 +489,7 @@ class MediasoupAdapter extends EventEmitter {
         ctx.consumers.set(`${peer.id}:${producer.id}`, consumer);
 
         peer.send({
-          type: 'sfu:consume',
+          type: "sfu:consume",
           consumerId: consumer.id,
           producerId: producer.id,
           kind: consumer.kind,
@@ -475,7 +498,7 @@ class MediasoupAdapter extends EventEmitter {
         break;
       }
 
-      case 'consumer:resume': {
+      case "consumer:resume": {
         const consumer = ctx.consumers.get(`${peer.id}:${payload.producerId}`);
         if (consumer) await consumer.resume();
         break;
@@ -501,7 +524,9 @@ class MediasoupAdapter extends EventEmitter {
    */
   _nextWorker() {
     if (this._workers.length === 0) {
-      throw new Error('[MediasoupAdapter] No workers available. Did you call init()?');
+      throw new Error(
+        "[MediasoupAdapter] No workers available. Did you call init()?",
+      );
     }
     const worker = this._workers[this._workerIndex % this._workers.length];
     this._workerIndex++;
